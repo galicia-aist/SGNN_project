@@ -4,13 +4,436 @@ import scipy.io as scio
 import pickle as pkl
 import networkx as nx
 import sys
-
+from ogb.nodeproppred import PygNodePropPredDataset
+import json
+import torch
+from torch_geometric.utils import to_scipy_sparse_matrix, from_scipy_sparse_matrix
+from torch_geometric.data import Data
+from torch_geometric.datasets import (Planetoid, Reddit, Flickr, FacebookPagePage, Actor, LastFMAsia, DeezerEurope,
+                                      Amazon, Yelp)
+from torch_geometric.utils import add_self_loops
 
 YALE = 'Yale'
 UMIST = 'UMIST'
 THREE_RINGS = 'three_rings'
 
 
+def get_training_data(dataset_choice):
+
+    if dataset_choice == "Cora" or dataset_choice == "Citeseer" or dataset_choice == "PubMed":
+        data = load_planetoid_dataset(dataset_choice)
+    elif dataset_choice == "Flickr":
+        data = load_flickr_data()
+    elif dataset_choice == "FacebookPagePage":
+        data = load_facebook_pagepage_dataset()
+    elif dataset_choice == "Actor":
+        data = load_actor_dataset()
+    elif dataset_choice == "LastFMAsia":
+        data = load_lastfmasia_dataset()
+    elif dataset_choice == "DeezerEurope":
+        data = load_deezereurope_dataset()
+    elif dataset_choice == "Amazon Computers":
+        data = load_amazon_dataset(dataset_choice.split(" ")[1])
+    elif dataset_choice == "Amazon Photo":
+        data = load_amazon_dataset(dataset_choice.split(" ")[1])
+    elif dataset_choice == "Reddit":
+        data = load_reddit_data()
+    elif dataset_choice == "Yelp":
+        data = load_yelp_data()
+    elif dataset_choice == "Arxiv":
+        data = load_ogbn_dataset(dataset_choice.lower())
+    elif dataset_choice == "Products":
+        data = load_ogbn_dataset(dataset_choice.lower())
+    elif dataset_choice == "Mag":
+        data = load_ogbn_dataset(dataset_choice.lower())
+    else:
+        print("Invalid dataset")
+        exit()
+
+    return data
+
+
+def load_reddit_from_npz(dataset_dir: str):
+    # Load NPZ files for NPZ-based Reddit data
+    adj = sp.load_npz(dataset_dir + "reddit_adj.npz")
+    data = np.load(dataset_dir + "reddit.npz")
+    return (adj, data['feats'], data['y_train'], data['y_val'],
+            data['y_test'], data['train_index'], data['val_index'], data['test_index'])
+
+
+def load_reddit_data(dataset_dir: str = "data/") -> Data:
+
+    adj, features, y_train, y_val, y_test, train_index, val_index, test_index = load_reddit_from_npz(dataset_dir)
+
+    num_nodes = adj.shape[0]
+    labels = np.zeros(num_nodes)
+    labels[train_index] = y_train
+    labels[val_index] = y_val
+    labels[test_index] = y_test
+
+    # Convert adjacency matrix to edge_index format
+    adj = adj + adj.T  # ensure symmetry
+    edge_index, _ = from_scipy_sparse_matrix(adj)
+
+    # Normalize features
+    features = torch.FloatTensor(features)
+    features = (features - features.mean(dim=0)) / features.std(dim=0)
+
+    labels = torch.LongTensor(labels)
+    train_mask = torch.BoolTensor(np.isin(np.arange(num_nodes), train_index))
+    val_mask = torch.BoolTensor(np.isin(np.arange(num_nodes), val_index))
+    test_mask = torch.BoolTensor(np.isin(np.arange(num_nodes), test_index))
+
+    # Load built-in Reddit dataset for reference (do not use for training here)
+    pyg_data = Reddit(root='./data/Reddit')
+    num_features = pyg_data.num_features
+    num_classes = pyg_data.num_classes
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask, adjacency=adj,
+                num_features=num_features, num_classes=num_classes, edge_index=edge_index)
+    return data
+
+
+def load_ogbn_dataset(dataset_n):
+
+    dataset_name = f'ogbn-{dataset_n}'
+    dataset = PygNodePropPredDataset(name=dataset_name, root='data/')
+    data = dataset[0]  # For OGBN-MAG, this is a HeteroData object
+    split_idx = dataset.get_idx_split()
+
+    if dataset_n.lower() == 'mag':
+        # 1) Features & labels
+        features = data.x_dict['paper']  # shape [num_papers, num_features]
+        labels = data.y_dict['paper'].view(-1)  # shape [num_papers]
+
+        # 2) Number of paper nodes
+        num_nodes = features.size(0)  # or features.shape[0]
+
+        # 3) Citation edges among papers
+        edge_index = data.edge_index_dict[('paper', 'cites', 'paper')]
+
+        # 4) Train/val/test splits for "paper" nodes
+        train_index = split_idx['train']['paper']
+        val_index = split_idx['valid']['paper']
+        test_index = split_idx['test']['paper']
+    else:
+        # --- Homogeneous access for Arxiv/Products ---
+        features = data.x.numpy()
+        labels = data.y.squeeze().numpy()
+        edge_index = data.edge_index
+        num_nodes = data.num_nodes
+
+        train_index = split_idx['train']
+        val_index = split_idx['valid']
+        test_index = split_idx['test']
+
+    # Convert edge_index to a SciPy sparse adjacency matrix:
+    adjacency = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes)
+
+    data = Data(x=features, y=labels, train_mask=train_index, val_mask=val_index, test_mask=test_index,
+                adjacency=adjacency, num_features=dataset.num_features, num_classes=dataset.num_classes,
+                edge_index=edge_index)
+
+    return data
+
+
+def load_flickr_data():
+
+    pyg_data = Flickr(root=f"data/Flickr")
+
+    # Paths to the raw Flickr data
+    raw_dir = f"./data/Flickr/raw/"
+
+    # Load data
+    adj_full = sp.load_npz(raw_dir + "adj_full.npz")
+    features = np.load(raw_dir + "feats.npy")
+    with open(raw_dir + "class_map.json") as f:
+        class_map = json.load(f)
+    with open(raw_dir + "role.json") as f:
+        roles = json.load(f)
+
+    # Convert class_map to labels
+    labels = np.array([class_map[str(i)] for i in range(len(class_map))])
+
+    # Create train, val, and test masks
+    num_nodes = len(labels)
+    train_mask = np.zeros(num_nodes, dtype=bool)
+    val_mask = np.zeros(num_nodes, dtype=bool)
+    test_mask = np.zeros(num_nodes, dtype=bool)
+
+    train_mask[roles["tr"]] = True
+    val_mask[roles["va"]] = True
+    test_mask[roles["te"]] = True
+
+    # Create adjacency matrix
+    adj = nx.adjacency_matrix(nx.from_scipy_sparse_array(adj_full))
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask,
+                test_mask=test_mask, adjacency=adj, pyg_data=pyg_data)
+
+    return data
+
+
+def load_yelp_data():
+
+    # Load Yelp dataset
+    dataset = Yelp(root='data/Yelp')
+
+    # Select the first (and only) graph in the dataset
+    data = dataset[0]
+
+    # Convert multi-label to single-label by taking the dominant label
+    labels = data.y.argmax(dim=1)
+    unique_classes = torch.unique(labels)
+    mapping = {old_label.item(): new_label for new_label, old_label in enumerate(unique_classes)}
+    labels = torch.tensor([mapping[label.item()] for label in labels], dtype=torch.long)
+
+    # Add self-loops (SGC requires this)
+    data.edge_index, _ = add_self_loops(data.edge_index, num_nodes=data.num_nodes)
+
+    edge_index = data.edge_index
+
+    # Extract masks
+    train_mask, val_mask, test_mask = data.train_mask, data.val_mask, data.test_mask
+
+    # Convert adjacency to sparse matrix
+    adjacency = to_scipy_sparse_matrix(data.edge_index, num_nodes=data.num_nodes)
+
+    features = data.x
+
+    num_features = dataset.num_node_features
+    num_classes = dataset.num_classes
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask, adjacency=adjacency
+                , num_features=num_features, num_classes=num_classes, edge_index=edge_index)
+
+    return data
+
+
+def load_facebook_pagepage_dataset():
+
+    pyg_data = FacebookPagePage(root=f"data/FacebookPagePage")
+
+    # Load the raw data
+    data = np.load(f"data/FacebookPagePage/raw/facebook.npz", allow_pickle=True)
+
+    # Extract edges, features, and target (labels)
+    edges = data["edges"]  # Edge list
+    features = data["features"]  # Node features
+    labels = data["target"]  # Node labels
+
+    # Create adjacency matrix from edge list
+    num_nodes = features.shape[0]
+    adjacency = sp.coo_matrix(
+        (np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])),
+        shape=(num_nodes, num_nodes),
+        dtype=np.float32
+    ).tocsc()
+
+    # Assuming no train/val/test masks in this dataset, split manually (if needed)
+    train_mask = np.zeros(num_nodes, dtype=bool)
+    val_mask = np.zeros(num_nodes, dtype=bool)
+    test_mask = np.zeros(num_nodes, dtype=bool)
+
+    # Example: First 70% for training, next 15% for validation, last 15% for testing
+    train_mask[: int(0.7 * num_nodes)] = True
+    val_mask[int(0.7 * num_nodes): int(0.85 * num_nodes)] = True
+    test_mask[int(0.85 * num_nodes):] = True
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask,
+                test_mask=test_mask, adjacency=adjacency, pyg_data=pyg_data)
+
+    return data
+
+
+def load_lastfmasia_dataset():
+
+    pyg_data = LastFMAsia(root=f"data/LastFMAsia")
+
+    # Load the raw data
+    data = np.load(f"data/LastFMAsia/raw/lastfm_asia.npz", allow_pickle=True)
+
+    # Extract edges, features, and target (labels)
+    edges = data["edges"]  # Edge list
+    features = data["features"]  # Node features
+    labels = data["target"]  # Node labels
+
+    # Create adjacency matrix from edge list
+    num_nodes = features.shape[0]
+    adjacency = sp.coo_matrix(
+        (np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])),
+        shape=(num_nodes, num_nodes),
+        dtype=np.float32
+    ).tocsc()
+
+    # Assuming no train/val/test masks in this dataset, split manually (if needed)
+    train_mask = np.zeros(num_nodes, dtype=bool)
+    val_mask = np.zeros(num_nodes, dtype=bool)
+    test_mask = np.zeros(num_nodes, dtype=bool)
+
+    # Example: First 70% for training, next 15% for validation, last 15% for testing
+    train_mask[: int(0.7 * num_nodes)] = True
+    val_mask[int(0.7 * num_nodes): int(0.85 * num_nodes)] = True
+    test_mask[int(0.85 * num_nodes):] = True
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask,
+                test_mask=test_mask, adjacency=adjacency, pyg_data=pyg_data)
+
+    return data
+
+
+def load_deezereurope_dataset():
+
+    pyg_data = LastFMAsia(root=f"data/DeezerEurope")
+
+    # Load the raw data
+    data = np.load(f"data/DeezerEurope/raw/deezer_europe.npz", allow_pickle=True)
+
+    # Extract edges, features, and target (labels)
+    edges = data["edges"]  # Edge list
+    features = data["features"]  # Node features
+    labels = data["target"]  # Node labels
+
+    # Create adjacency matrix from edge list
+    num_nodes = features.shape[0]
+    adjacency = sp.coo_matrix(
+        (np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])),
+        shape=(num_nodes, num_nodes),
+        dtype=np.float32
+    ).tocsc()
+
+    # Assuming no train/val/test masks in this dataset, split manually (if needed)
+    train_mask = np.zeros(num_nodes, dtype=bool)
+    val_mask = np.zeros(num_nodes, dtype=bool)
+    test_mask = np.zeros(num_nodes, dtype=bool)
+
+    # Example: First 70% for training, next 15% for validation, last 15% for testing
+    train_mask[: int(0.7 * num_nodes)] = True
+    val_mask[int(0.7 * num_nodes): int(0.85 * num_nodes)] = True
+    test_mask[int(0.85 * num_nodes):] = True
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask,
+                test_mask=test_mask, adjacency=adjacency, pyg_data=pyg_data)
+
+    return data
+
+def load_actor_dataset():
+
+    data = Actor(root=f"data/Actor")
+
+    # File paths
+    edges_file = "data/Actor/raw/out1_graph_edges.txt"
+    features_labels_file = "data/Actor/raw/out1_node_feature_label.txt"
+
+    # Load edges (tab-separated values)
+    edges = np.loadtxt(edges_file, dtype=int, delimiter="\t", skiprows=1)
+
+    # Process features and labels manually due to mixed delimiter
+    features = []
+    labels = []
+    max_feature_length = 0  # Track the maximum length of feature vectors
+
+    with open(features_labels_file, "r") as f:
+        lines = f.readlines()[1:]  # Skip the header line
+        for line in lines:
+            parts = line.strip().split("\t")  # Split by tab
+            feature_values = list(map(float, parts[1].split(",")))  # Split features by comma
+            label = int(parts[-1])  # Last column is the label
+
+            features.append(feature_values)
+            labels.append(label)
+
+            # Update maximum feature length
+            max_feature_length = max(max_feature_length, len(feature_values))
+
+    # Pad features to the maximum feature length
+    padded_features = np.zeros((len(features), max_feature_length), dtype=np.float32)
+    for i, feature_row in enumerate(features):
+        padded_features[i, :len(feature_row)] = feature_row
+
+    # Convert to PyTorch tensors
+    features = torch.tensor(padded_features, dtype=torch.float32)
+    labels = torch.tensor(labels, dtype=torch.long)  # Ensure long dtype for classification
+
+    # Create adjacency matrix
+    num_nodes = len(features)
+    adjacency = sp.coo_matrix(
+        (np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])),
+        shape=(num_nodes, num_nodes),
+        dtype=np.float32
+    )
+
+    # Convert adjacency matrix to PyG format
+    edge_index, _ = from_scipy_sparse_matrix(adjacency)
+
+    # Generate train/validation/test masks manually
+    train_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    val_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+
+    # Example: First 70% for training, next 15% for validation, last 15% for testing
+    train_mask[: int(0.7 * num_nodes)] = True
+    val_mask[int(0.7 * num_nodes): int(0.85 * num_nodes)] = True
+    test_mask[int(0.85 * num_nodes):] = True
+
+    # Create PyG Data object
+    data_obj = Data(
+        x=features,
+        y=labels,
+        train_mask=train_mask,
+        val_mask=val_mask,
+        test_mask=test_mask,
+        adjacency=adjacency,
+        num_features=data.num_features,
+        num_classes=data.num_classes,  # Number of unique classes
+        edge_index=edge_index
+    )
+
+    return data_obj
+
+
+
+def load_amazon_dataset(dataset_type):
+
+    pyg_data = Amazon(root=f"data/Amazon", name=dataset_type)
+
+    # Load the raw data
+    data = np.load(f"data/Amazon/{dataset_type}/raw/amazon_electronics_{dataset_type.lower()}.npz", allow_pickle=True)
+
+    # Extract adjacency matrix components
+    adj_data = data["adj_data"]
+    adj_indices = data["adj_indices"]
+    adj_indptr = data["adj_indptr"]
+    adj_shape = tuple(data["adj_shape"])
+    adjacency = sp.csr_matrix((adj_data, adj_indices, adj_indptr), shape=adj_shape)
+
+    # Extract features
+    attr_data = data["attr_data"]
+    attr_indices = data["attr_indices"]
+    attr_indptr = data["attr_indptr"]
+    attr_shape = tuple(data["attr_shape"])
+    features = sp.csr_matrix((attr_data, attr_indices, attr_indptr), shape=attr_shape).todense()  # Ensure dense matrix
+
+    # Extract labels
+    labels = np.array(data["labels"], dtype=np.int64)  # Convert labels to int64 for compatibility
+
+    # Create train, validation, and test masks
+    num_nodes = features.shape[0]
+    train_mask = np.zeros(num_nodes, dtype=bool)
+    val_mask = np.zeros(num_nodes, dtype=bool)
+    test_mask = np.zeros(num_nodes, dtype=bool)
+
+    # Example split: First 70% for training, next 15% for validation, last 15% for testing
+    train_mask[: int(0.7 * num_nodes)] = True
+    val_mask[int(0.7 * num_nodes): int(0.85 * num_nodes)] = True
+    test_mask[int(0.85 * num_nodes):] = True
+
+    features = np.array(features, dtype=np.float32)
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask,
+                test_mask=test_mask, adjacency=adjacency, pyg_data=pyg_data)
+
+    return data
 def load_cora():
     path = 'data/cora/'
     data_name = 'cora'
@@ -73,13 +496,17 @@ def load_citeseer_from_mat():
     print('Loading from raw data file...')
     data = scio.loadmat('data/citeseer.mat')
     adj = data['W']
-    # adj = adj - adj.diagonal()
     features = data['fea']
-    # adj = sp.coo_matrix(adj)
     labels = data['gnd']
     labels = np.reshape(labels, (labels.shape[0],))
-    adj = adj.T + adj
+
+    # Convert adjacency to sparse matrix
+    adj = sp.coo_matrix(adj)
+
+    # Ensure symmetry and convert to binary (0 or 1)
+    adj = adj + adj.T
     adj = adj.minimum(1)
+
     return features, adj.tocsr(), labels
 
 
@@ -95,8 +522,46 @@ def sample_mask(idx, l):
     """Create mask."""
     mask = np.zeros(l)
     mask[idx] = 1
-    return np.array(mask, dtype=np.bool)
+    return np.array(mask, dtype=bool)
 
+def load_planetoid_dataset(name):
+    # Load dataset
+    dataset = Planetoid(root=f"./data/{name}", name=name)
+    data = dataset[0]  # Planetoid datasets contain only one graph
+
+
+
+    # Extract features, labels, and masks
+    features = data.x
+    labels = data.y
+    train_mask = data.train_mask
+    val_mask = data.val_mask
+    test_mask = data.test_mask
+    edge_index = data.edge_index  # Ensure this is in the correct shape
+
+    num_nodes = features.shape[0]
+
+    edges = data.edge_index.numpy().T
+    adjacency = sp.coo_matrix(
+        (np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])),
+        shape=(num_nodes, num_nodes),
+        dtype=np.float32
+    ).tocsc()
+
+    # Create the final Data object
+    data_obj = Data(
+        x=features,
+        y=labels,
+        train_mask=train_mask,
+        val_mask=val_mask,
+        test_mask=test_mask,
+        adjacency=adjacency,  # Extra: adjacency matrix
+        num_features=features.shape[1],
+        num_classes=labels.max().item() + 1,
+        edge_index=edge_index
+    )
+
+    return data_obj
 
 def load_data(dataset_str):
     """
@@ -118,17 +583,17 @@ def load_data(dataset_str):
     names = ['x', 'y', 'tx', 'ty', 'allx', 'ally', 'graph']
     objects = []
     for i in range(len(names)):
-        with open("data/node/ind.{}.{}".format(dataset_str, names[i]), 'rb') as f:
+        with open("data/node/ind.{}.{}".format(dataset_str.lower(), names[i]), 'rb') as f:
             if sys.version_info > (3, 0):
                 objects.append(pkl.load(f, encoding='latin1'))
             else:
                 objects.append(pkl.load(f))
 
     x, y, tx, ty, allx, ally, graph = tuple(objects)
-    test_idx_reorder = parse_index_file("data/node/ind.{}.test.index".format(dataset_str))
+    test_idx_reorder = parse_index_file("data/node/ind.{}.test.index".format(dataset_str.lower()))
     test_idx_range = np.sort(test_idx_reorder)
 
-    if dataset_str == 'citeseer':
+    if dataset_str == 'Citeseer':
         # Fix citeseer dataset (there are some isolated nodes in the graph)
         # Find isolated nodes, add them as zero-vecs into the right position
         test_idx_range_full = range(min(test_idx_reorder), max(test_idx_reorder)+1)
@@ -165,7 +630,15 @@ def load_data(dataset_str):
     # label = (y_train + y_val + y_test).argmax(axis=1)
     label = labels.argmax(axis=1)
     # return adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask
-    return adj, features, label, train_mask, val_mask, test_mask
+    num_classes = labels.shape[1]
+    num_features = features.shape[1]
+    row, col = adj.nonzero()  # gets the indices of non-zero entries
+    edge_index = torch.tensor(np.array([row, col]), dtype=torch.long)
+
+    data = Data(x=features, y=labels, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask, adjacency=adj
+                , num_features=num_features, num_classes=num_classes, edge_index=edge_index)
+
+    return data
 
 
 def sparse_to_tuple(sparse_mx):

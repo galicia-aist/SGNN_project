@@ -1,0 +1,671 @@
+{
+    "SGNN": {
+        "Clustering": {
+            "Cora": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    128,
+                    64,
+                    32
+                ],
+                "max_iter": 100,
+                "batch": 128,
+                "BP_count": 10,
+                "learning_rate": 0.001,
+                "lam": 0.000001,
+                "eta": 1,
+                "loss": "loss1 / sample_size",
+                "negative_slope": 0.2
+            },
+            "PubMed": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 4096,
+                "BP_count": 10,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "order": 2,
+                "eta": 10,
+                "loss": "loss1",
+                "AU": "relu",
+                "activation": "leaky_relu=5",
+                "negative_slope": 5
+            },
+            "Flickr": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 256,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "leaky_relu slope=0.2",
+                "activation": "linear",
+                "negative_slope": 0.2
+            },
+            "FacebookPagePage": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 256,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "leaky_relu slope=0.2",
+                "activation": "linear",
+                "negative_slope": 0.2
+            },
+            "Actor": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 256,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "leaky_relu slope=0.2",
+                "activation": "linear",
+                "negative_slope": 0.2
+            },
+            "LastFMAsia": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 256,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "leaky_relu slope=0.2",
+                "activation": "linear",
+                "negative_slope": 0.2
+            },
+            "DeezerEurope": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 256,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "leaky_relu slope=0.2",
+                "activation": "linear",
+                "negative_slope": 0.2
+            },
+            "Amazon": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 256,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "leaky_relu slope=0.2",
+                "activation": "linear",
+                "negative_slope": 0.2
+            },
+            "Citeseer": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    256,
+                    128
+                ],
+                "max_iter": 100,
+                "batch": 256,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "leaky_relu slope=0.2",
+                "activation": "linear",
+                "negative_slope": 0.2
+            },
+            "Reddit": {
+                "mask_rate": 0.2,
+                "overlook_rates": null,
+                "layers": [
+                    128,
+                    64
+                ],
+                "max_iter": 10000,
+                "batch": 512,
+                "BP_count": 5,
+                "learning_rate": 0.0001,
+                "lam": 0.000001,
+                "eta": 10,
+                "loss": "loss1",
+                "order": 2,
+                "AU": "relu",
+                "activation": "linear"
+            }
+        },
+        "Classification": {
+            "Cora": {
+                "eta": 100,
+                "BP_count": 5,
+                "lam": 0.001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 128,
+                        "inner_act": "linear",
+                        "activation": "leaky_relu=0.2",
+                        "order": 1,
+                        "batch_size": 2708,
+                        "learning_rate": 0.01,
+                        "max_iter": 60
+                    },
+                    {
+                        "neurons": 64,
+                        "inner_act": "linear",
+                        "activation": "relu",
+                        "learning_rate": 0.01,
+                        "order": 1,
+                        "batch_size": 2708,
+                        "max_iter": 60
+                    },
+                    {
+                        "neurons": 32,
+                        "inner_act": "linear",
+                        "activation": "linear",
+                        "learning_rate": 0.01,
+                        "order": 2,
+                        "batch_size": 140,
+                        "max_iter": 60
+                    }
+                ]
+            },
+            "Citeseer": {
+                "eta": 200,
+                "BP_count": 3,
+                "lam": 0.001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 2024,
+                        "inner_act": "tanh",
+                        "activation": "relu",
+                        "learning_rate": 0.00001,
+                        "order": 3,
+                        "max_iter": 100,
+                        "batch_size": 256
+                    },
+                    {
+                        "neurons": 64,
+                        "inner_act": "tanh",
+                        "activation": "linear",
+                        "learning_rate": 0.00001,
+                        "order": 3,
+                        "max_iter": 150,
+                        "batch_size": 8192
+                    }
+                ]
+            },
+            "PubMed": {
+                "eta": 100,
+                "BP_count": 3,
+                "lam": 0.001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 256,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": 0.01,
+                        "order": 1,
+                        "max_iter": 100,
+                        "batch_size": 8192
+                    },
+                    {
+                        "neurons": 128,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": 0.0001,
+                        "order": 2,
+                        "max_iter": 40,
+                        "batch_size": 2048
+                    }
+                ]
+            },
+            "Flickr": {
+                "eta": 100,
+                "BP_count": 10,
+                "lam": 0.0001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 1024,
+                        "inner_act": "linear",
+                        "activation": "leaky_relu=0.3",
+                        "learning_rate": 0.0001,
+                        "order": 1,
+                        "max_iter": 300,
+                        "batch_size": 8192
+                    },
+                    {
+                        "neurons": 32,
+                        "inner_act": "tanh",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": 0.0001,
+                        "order": 1,
+                        "max_iter": 100,
+                        "batch_size": 2048
+                    },
+                    {
+                        "neurons": 768,
+                        "inner_act": "tanh",
+                        "activation": "linear",
+                        "learning_rate": "5e-5",
+                        "order": 4,
+                        "max_iter": 200,
+                        "batch_size": 1024
+                    }
+                ]
+            },
+            "FacebookPagePage": {
+                "eta": 200,
+                "BP_count": 5,
+                "lam": 0.0001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 512,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": 0.001,
+                        "order": 2,
+                        "max_iter": 200,
+                        "batch_size": 4096
+                    },
+                    {
+                        "neurons": 256,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.1",
+                        "learning_rate": 0.0001,
+                        "order": 2,
+                        "max_iter": 100,
+                        "batch_size": 2048
+                    }
+                ]
+            },
+            "Actor": {
+                "eta": 300,
+                "BP_count": 5,
+                "lam": 0.000001 ,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 1024,
+                        "inner_act": "tanh",
+                        "activation": "leaky_relu=0.05",
+                        "learning_rate": 0.000025,
+                        "order": 5,
+                        "max_iter": 200,
+                        "batch_size": 128
+                    },
+                    {
+                        "neurons": 512,
+                        "inner_act": "relu",
+                        "activation": "relu",
+                        "learning_rate": 0.00001,
+                        "order": 3,
+                        "max_iter": 150,
+                        "batch_size": 128
+                    },
+                    {
+                        "neurons": 256,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.05",
+                        "learning_rate": 0.000005,
+                        "order": 3,
+                        "max_iter": 100,
+                        "batch_size": 64
+                    }
+                ]
+            },
+            "LastFMAsia": {
+                "eta": 200,
+                "BP_count": 5,
+                "lam": 0.0001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 512,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": 0.001,
+                        "order": 2,
+                        "max_iter": 200,
+                        "batch_size": 4096
+                    },
+                    {
+                        "neurons": 256,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.1",
+                        "learning_rate": 0.0001,
+                        "order": 2,
+                        "max_iter": 100,
+                        "batch_size": 2048
+                    }
+                ]
+            },
+            "DeezerEurope": {
+                "eta": 1,
+                "BP_count": 7,
+                "lam": 0.0001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 256,
+                        "inner_act": "tanh",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": "2.5e-5",
+                        "order": 1,
+                        "max_iter": 40,
+                        "batch_size": 256
+                    },
+                    {
+                        "neurons": 32,
+                        "inner_act": "linear",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": 0.01,
+                        "order": 1,
+                        "max_iter": 100,
+                        "batch_size": 8192
+                    }
+                ]
+            },
+            "Amazon Photo": {
+                "eta": 1,
+                "BP_count": 10,
+                "lam": 0.0001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 2024,
+                        "inner_act": "tanh",
+                        "activation": "leaky_relu=0.3",
+                        "learning_rate": "2.5e-5",
+                        "order": 2,
+                        "max_iter": 300,
+                        "batch_size": 140
+                    },
+                    {
+                        "neurons": 256,
+                        "inner_act": "relu",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "order": 1,
+                        "max_iter": 600,
+                        "batch_size": 140
+                    }
+                ]
+            },
+            "Amazon Computers": {
+                "eta": 200,
+                "BP_count": 5,
+                "lam": 0.0001,
+                "isLarge": false,
+                "layers": [
+                    {
+                        "neurons": 512,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.2",
+                        "learning_rate": 0.001,
+                        "order": 2,
+                        "max_iter": 200,
+                        "batch_size": 4096
+                    },
+                    {
+                        "neurons": 256,
+                        "inner_act": "relu",
+                        "activation": "leaky_relu=0.1",
+                        "learning_rate": 0.0001,
+                        "order": 2,
+                        "max_iter": 100,
+                        "batch_size": 2048
+                    }
+                ]
+            },
+            "Reddit": {
+                "eta": 1000,
+                "BP_count": 5,
+                "lam": 0.000001,
+                "isLarge": true,
+                "layers": [
+                    {
+                        "neurons": 128,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    },
+                    {
+                        "neurons": 64,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    }
+                ]
+            },
+            "Yelp": {
+                "eta": 1000,
+                "BP_count": 5,
+                "lam": 0.000001,
+                "isLarge": true,
+                "layers": [
+                    {
+                        "neurons": 128,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    },
+                    {
+                        "neurons": 64,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    }
+                ]
+            },
+            "Arxiv": {
+                "eta": 1000,
+                "BP_count": 5,
+                "lam": 0.000001,
+                "isLarge": true,
+                "layers": [
+                    {
+                        "neurons": 128,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    },
+                    {
+                        "neurons": 64,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    }
+                ]
+            },
+            "Products": {
+                "eta": 1000,
+                "BP_count": 5,
+                "lam": 0.000001,
+                "isLarge": true,
+                "layers": [
+                    {
+                        "neurons": 128,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    },
+                    {
+                        "neurons": 64,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512
+                    }
+                ]
+            },
+            "Mag": {
+                "eta": 1000,
+                "BP_count": 5,
+                "lam": 0.000001,
+                "layers": [
+                    {
+                        "neurons": 128,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512,
+                        "isLarge": true
+                    },
+                    {
+                        "neurons": 64,
+                        "inner_act": "leaky_relu=0.2",
+                        "activation": "linear",
+                        "learning_rate": 0.0001,
+                        "max_iter": 10000,
+                        "batch_size": 512,
+                        "isLarge": true
+                    }
+                ]
+            }
+        }
+    },
+    "SGC": {
+        "Classification": {
+            "Cora": {
+                "epochs": 500,
+                "learning_rate": 0.01,
+                "weight_decay": 0.0005,
+                "isLarge": false
+            },
+            "Citeseer": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "weight_decay": 0.05,
+                "isLarge": false
+            },
+            "Pubmed": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "weight_decay": 0.0005,
+                "isLarge": false
+            },
+            "LastFMAsia": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "weight_decay": 0.0005,
+                "isLarge": false
+            },
+            "Reddit": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "batch_size_train": 512,
+                "batch_size_test": 1024,
+                "weight_decay": 0.0005,
+                "isLarge": true
+            },
+            "Yelp": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "batch_size_train": 1024,
+                "batch_size_test": 2048,
+                "weight_decay": 0.0005,
+                "isLarge": true
+            },
+            "Arxiv": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "batch_size_train": 1024,
+                "batch_size_test": 2048,
+                "weight_decay": 0.0005,
+                "isLarge": true
+            },
+            "Products": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "batch_size_train": 1024,
+                "batch_size_test": 2048,
+                "weight_decay": 0.0005,
+                "isLarge": true
+            },
+            "Mag": {
+                "epochs": 100,
+                "learning_rate": 0.01,
+                "batch_size_train": 1024,
+                "batch_size_test": 2048,
+                "weight_decay": 0.0005,
+                "isLarge": true
+            }
+        }
+    }
+}

@@ -1,12 +1,15 @@
+import os
+
 import numpy as np
 import random
-from numpy.core.fromnumeric import shape
 import torch
 from sklearn.cluster import KMeans, SpectralClustering
 from metric import cal_clustering_metric
 import scipy.sparse as sp
 from sklearn.metrics import f1_score
-
+import json
+import argparse
+import logging
 
 def generate_overlooked_adjacency(adjacency, rate=0.0):
     """
@@ -124,13 +127,13 @@ def relaxed_k_means(X, n_clusters, labels):
     return acc, nmi
 
 
-def print_SGNN_info(stackedGNN):
-    print('\n============ Settings ============')
-    print('Totally {} layers:'.format(len(stackedGNN.layers)))
+def print_SGNN_info(stackedGNN, logger=None):
+    logger.info('\n============ Settings ============')
+    logger.info('Totally {} layers:'.format(len(stackedGNN.layers)))
     for i, layer in enumerate(stackedGNN.layers):
-        print('{}-th layer: {}'.format(i + 1, layer))
-    print('overlook_rates={}'.format(stackedGNN.overlooked_rates))
-    print('BP_count={}, eta={}\n'.format(stackedGNN.BP_count, stackedGNN.eta))
+        logger.info('{}-th layer: {}'.format(i + 1, layer))
+    logger.info('overlook_rates={}'.format(stackedGNN.overlooked_rates))
+    logger.info('BP_count={}, eta={}\n'.format(stackedGNN.BP_count, stackedGNN.eta))
 
 
 def clustering(X, labels):
@@ -146,6 +149,7 @@ def clustering_tensor(X, labels, relaxed_kmeans=False):
         return
     rkm_acc, rkm_nmi = relaxed_k_means(X, n_clusters, labels)
     print('Relaxed K-Means results: ACC: %5.4f, NMI: %5.4f' % (rkm_acc, rkm_nmi))
+    return rkm_acc, rkm_nmi
     # K = embedding.matmul(embedding.t()).abs()
     # K = (K + K.t()) / 2
     # affinity = K.cpu().detach().numpy()
@@ -153,14 +157,18 @@ def clustering_tensor(X, labels, relaxed_kmeans=False):
     # print('SC results: ACC: %5.4f, NMI: %5.4f' % (sc_acc, sc_nmi))
 
 
-def classification(prediction, labels, mask=None):
+def classification(prediction, labels, mask=None, logger=None, debug=False):
     # num = labels.shape[0]
     # acc = (prediction == labels).sum() / num
     gnd = labels if mask is None else labels[mask]
     pred = prediction if mask is None else prediction[mask]
     acc = f1_score(gnd, pred, average='micro')
     f1 = f1_score(gnd, pred, average='macro')
-    print('\n======= ACC: %5.4f, F1-Score: %5.4f =======\n' % (acc, f1))
+    if debug:
+        logger.debug('ACC: %5.4f, F1-Score: %5.4f' % (acc, f1))
+    else:
+        logger.info('ACC: %5.4f, F1-Score: %5.4f' % (acc, f1))
+    return acc
 
 
 def set_seed(seed):
@@ -169,3 +177,175 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
+
+def sample_hyperparams(filename, dataset_name):
+    """Reads hyperparameter ranges from a JSON file and randomly selects a configuration."""
+    random.seed()
+
+    with open(filename, "r") as f:
+        data = json.load(f)
+
+    params = data["Test"]
+
+    # Randomly sample values for global hyperparameters
+    sampled_params = {
+        "eta": random.choice(params["eta"]),
+        "BP_count": random.choice(params["BP_count"]),
+        "lam": random.choice(params["lam"]),
+        "layers": []
+    }
+
+    # Determine random number of layers (2 or 3)
+    num_layers = random.choice([2, 3])
+
+    # Sample values for each layer dynamically
+    for _ in range(num_layers):
+        sampled_layer = {
+            "neurons": random.choice(params["layer"][0]["neurons"]),
+            "inner_act": random.choice(params["layer"][0]["inner_act"]),
+            "activation": random.choice(params["layer"][0]["activation"]),
+            "learning_rate": random.choice(params["layer"][0]["learning_rate"]),
+            "order": random.choice(params["layer"][0]["order"]),
+            "max_iter": random.choice(params["layer"][0]["max_iter"]),
+            "batch_size": random.choice(params["layer"][0]["batch_size"])
+        }
+        sampled_params["layers"].append(sampled_layer)
+
+    return sampled_params
+
+def set_arg_parser():
+    ALLOWED_DATASETS = [
+        "Cora",
+        "Citeseer",
+        "PubMed",
+        "Flickr",
+        "FacebookPagePage",
+        "Actor",
+        "LastFMAsia",
+        "DeezerEurope",
+        "Amazon Computers",
+        "Amazon Photo",
+        "Reddit",
+        "Arxiv",
+        "Products",
+        "Mag",
+        "Yelp"
+    ]
+    ALLOWED_MODELS = [
+        "SGNN",
+        "GCN",
+        "SGC"
+    ]
+
+    parser = argparse.ArgumentParser(description="SGNN script")
+    parser.add_argument("--cuda_num", type=str, required=True, help="GPU to use")
+    parser.add_argument(
+        "--model",
+        type=str,
+        choices=ALLOWED_MODELS,  # Restricts choices
+        required=True,
+        help=f"Model name (choices: {', '.join(ALLOWED_MODELS)})"
+    )
+    parser.add_argument(
+        "--data",
+        type=str,
+        choices=ALLOWED_DATASETS,  # Restricts choices
+        required=True,
+        help=f"Dataset name (choices: {', '.join(ALLOWED_DATASETS)})"
+    )
+    parser.add_argument("--task", type=str, required=True, help="Classification or Clustering")
+    parser.add_argument("--exp", type=int, required=True, help="How many times do you want to run the exercise")
+    parser.add_argument("--log_path", type=str, help="Where you want to store the logs")
+    parser.add_argument("--tuning", type=int, help="How many times you want to tune the hyperparameters")
+    parser.add_argument("--ddp", action="store_true", default=False, help="Use Distributed Data Parallelism")
+    args = parser.parse_args()
+
+    cuda_num = args.cuda_num
+    dataset_decision = args.data
+    model_decision = args.model
+    task_type = args.task
+    exp_times = args.exp
+    log_path = args.log_path
+    is_tuning = args.tuning
+    ddp = args.ddp
+
+    return cuda_num, dataset_decision, model_decision, task_type, exp_times, log_path, is_tuning, ddp
+
+
+class CustomFormatter(logging.Formatter):
+    """Custom formatter to include the current GPU in log messages with colors."""
+
+    # ANSI color codes
+    blue = "\x1b[34;20m"
+    green = "\x1b[32;20m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
+
+    # Log format with GPU info
+    format = "%(asctime)s - %(gpu_info)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+
+    # Different colors for different log levels
+    FORMATS = {
+        logging.DEBUG: green + format + reset,
+        logging.INFO: blue + format + reset,
+        logging.WARNING: yellow + format + reset,
+        logging.ERROR: red + format + reset,
+        logging.CRITICAL: bold_red + format + reset
+    }
+
+    def format(self, record):
+        # Get current GPU info
+        if torch.cuda.is_available():
+            gpu_id = torch.cuda.current_device()
+            gpu_name = torch.cuda.get_device_name(gpu_id)
+            record.gpu_info = f"GPU: {gpu_id} ({gpu_name})"
+        else:
+            record.gpu_info = "GPU: CPU"
+
+        # Select the appropriate format based on log level
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+def get_logger():
+    """Sets up the logger with GPU info and color-coded formatting."""
+    with open("global_settings.json", "r") as file:
+        loaded_data = json.load(file)
+
+    logger_settings = loaded_data["logger"]
+    model = logger_settings["model"]
+    log_path = logger_settings["log_path"]
+    dataset_name = logger_settings["dataset"]
+
+    if log_path == "local":
+        logs_dir = os.path.join(os.getcwd(), "logs")
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+
+    log_path = f"{logs_dir}//{model}_{dataset_name}.log"
+
+    logger = logging.getLogger(model)
+
+    # Check if handlers already exist (to prevent duplication)
+    if not logger.handlers:
+        # File handler (logs to file)
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setFormatter(CustomFormatter())
+
+        # Console handler (prints to console)
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(CustomFormatter())
+
+        # Add handlers to logger
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+
+        logger.setLevel(logging.DEBUG)
+
+    return logger
+
+def get_ddp_setting():
+    with open("global_settings.json", "r") as file:
+        return json.load(file)["ddp"]

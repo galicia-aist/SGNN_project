@@ -1,11 +1,15 @@
 import torch
 import numpy as np
+# from tensorflow_core.python.platform.tf_logging import debug
+from torch.fx.passes.pass_manager import logger
+
 import utils
 import scipy.sparse as sp
 import math
 import scipy.io as scio
-from gat import GraphAttentionLayer
-
+# from gat import GraphAttentionLayer
+from torch.nn.parallel import DistributedDataParallel as DDP
+from utils import get_ddp_setting
 
 RIDGE = 0
 LASSO = 1
@@ -14,13 +18,14 @@ LASSO = 1
 class SingleLayerGNN(torch.nn.Module):
     def __init__(self, adjacency, input_dim, embedding_dim, lam=10**-2, learning_rate=10**-3,
                  max_iter=50, inner_activation=None, activation=None, 
-                 device=None, batch_size=100, regularization=RIDGE, order=1):
+                 device=None, batch_size=100, regularization=RIDGE, order=1, logger=None):
         """
         X: scipy matrix, n * d
         adjacency: scipy matrix, n * n
         """
         super().__init__()
         self.lam = lam
+        self.logger = logger
         self.learning_rate = learning_rate
         self.max_iter = max_iter
         self.embedding_dim = embedding_dim
@@ -128,7 +133,8 @@ class SingleLayerGAE(SingleLayerGNN):
         adjacency: scipy matrix, n * n
         """
         super().__init__(adjacency, input_dim, embedding_dim, lam, learning_rate, 
-                         max_iter, inner_activation=inner_activation, activation=activation, device=device, batch_size=batch_size,
+                         max_iter, inner_activation=inner_activation, activation=activation, device=device,
+                         batch_size=batch_size,
                          regularization=regularization, order=order)
         self.overlooked_rate = overlooked_rate
         self.mask_rate = mask_rate
@@ -225,7 +231,8 @@ class SingleLayerGAE(SingleLayerGNN):
         """
 
         # process: A * X
-        processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device), self.device, order=self.order)
+        processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device),
+                                                                   self.device, order=self.order)
         torch.cuda.empty_cache()
         if not train:
             embedding = self(processed_X)
@@ -238,13 +245,15 @@ class SingleLayerGAE(SingleLayerGNN):
         for i in range(self.max_iter):
             optimizer.zero_grad()
             # sampling
-            samples, sampled_embedding_target, sampled_adjacency, sampled_overlook = self.get_samples(processed_X, embedding_target=embedding_target)
+            samples, sampled_embedding_target, sampled_adjacency, sampled_overlook = self.get_samples(
+                processed_X, embedding_target=embedding_target)
             embedding = self(samples)
-            loss = self.build_loss(embedding, sampled_adjacency, sampled_overlook, self.mask_rate, sampled_embedding_target, eta)
+            loss = self.build_loss(embedding, sampled_adjacency, sampled_overlook, self.mask_rate,
+                                   sampled_embedding_target, eta)
             loss.backward()
             optimizer.step()
             if i % (1000 if self.max_iter > 2000 else 100) == 0 or i == self.max_iter-1:
-                print('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
+                self.logger.debug('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
         embedding = self(processed_X).cpu().detach()
         processed_X = None
         torch.cuda.empty_cache()
@@ -256,12 +265,13 @@ class SingleLayerGCN(SingleLayerGNN):
     def __init__(self, adjacency, labels, training_mask, input_dim,
                  val_mask, lam=10**-2, learning_rate=10**-3, max_iter=50,
                  inner_activation=None, activation=None, device=None,
-                 batch_size=100, regularization=RIDGE, order=1):
+                 batch_size=100, regularization=RIDGE, order=1, logger=None):
         n_class = np.unique(labels).shape[0]
         super().__init__(adjacency, input_dim, n_class, lam=lam,
                          learning_rate=learning_rate, max_iter=max_iter,
                          inner_activation=inner_activation, activation=activation,
-                         device=device, batch_size=batch_size, regularization=regularization, order=order)
+                         device=device, batch_size=batch_size, regularization=regularization,
+                         order=order, logger=logger)
         self.labels = torch.tensor(labels).long().to(self.device)
         self.training_mask = torch.tensor(training_mask).to(self.device)
         self.val_mask = torch.tensor(val_mask).to(self.device)
@@ -288,7 +298,8 @@ class SingleLayerGCN(SingleLayerGNN):
     def run(self, X, embedding_target=None, eta=1, train=True):
 
         # process: A * X and ensure X on device
-        processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device), self.device, order=self.order)
+        processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device), self.device,
+                                                                   order=self.order)
         if not train:
             embedding = self(processed_X)
             expected_X = self.compute_with_U(X.to(self.device)).cpu().detach()
@@ -301,13 +312,14 @@ class SingleLayerGCN(SingleLayerGNN):
         for i in range(self.max_iter):
             optimizer.zero_grad()
             # sampling
-            samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels, embedding_target=training_target)
+            samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels,
+                                                                                 embedding_target=training_target)
             embedding = self(samples)
             loss = self.build_loss(embedding, sampled_labels, sampled_embedding_target, eta=eta)
             loss.backward()
             optimizer.step()
             if i % (1000 if self.max_iter > 2000 else 100) == 0 or i == self.max_iter-1:
-                print('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
+                self.logger.debug('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
             # if self.stop_training(processed_X):
             #     print('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
             #     break
@@ -346,13 +358,15 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
     def __init__(self, adjacency, labels, training_mask, input_dim, embedding_dim, 
                  val_mask, lam=10**-2, learning_rate=10**-3, max_iter=50,
                  inner_activation=None, activation=None, device=None,
-                 batch_size=100, regularization=RIDGE, order=1, require_expected_input=True):
+                 batch_size=100, regularization=RIDGE, order=1, require_expected_input=True, logger=None):
         self.n_class = np.unique(labels).shape[0]
         super().__init__(adjacency, input_dim, embedding_dim, lam=lam,
                          learning_rate=learning_rate, max_iter=max_iter,
                          inner_activation=inner_activation, activation=activation,
-                         device=device, batch_size=batch_size, regularization=regularization, order=order)
+                         device=device, batch_size=batch_size, regularization=regularization,
+                         order=order, logger=logger)
         self.labels = torch.tensor(labels).long().to(self.device)
+        self.logger = logger
         self.training_mask = torch.tensor(training_mask).to(self.device)
         self.val_mask = torch.tensor(val_mask).to(self.device)
         # assert self.training_mask.dtype is torch.bool
@@ -387,7 +401,8 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
     def run(self, X, embedding_target=None, eta=1, train=True):
 
         # process: A * X and ensure X on device
-        processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device), self.device, order=self.order)
+        processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device), self.device,
+                                                                   order=self.order)
 
         if not train:
             embedding = self(processed_X)
@@ -395,25 +410,28 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
             self.expected_X = expected_X
             return embedding.detach()
         training_X = processed_X[self.training_mask, :]
-        training_target = None if embedding_target is None else embedding_target[self.training_mask, :].to(self.device)
+        training_target = None if embedding_target is None else embedding_target[self.training_mask.to
+                                                                                 (embedding_target.device), :]
         training_labels = self.labels[self.training_mask]
         # learning_rate = self.learning_rate if len(self.losses) < 150 else self.learning_rate / 10
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         for i in range(self.max_iter):
             optimizer.zero_grad()
             # sampling
-            samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels, embedding_target=training_target)
+            samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels,
+                                                                                 embedding_target=training_target)
             embedding = self(samples)
             loss = self.build_loss(embedding, sampled_labels, sampled_embedding_target, eta=eta)
             if embedding_target is not None:
-                samples, sampled_embedding_target, _ = self.get_samples(processed_X, embedding_target=embedding_target, sample_size=self.batch_size)
+                samples, sampled_embedding_target, _ = self.get_samples(processed_X, embedding_target=embedding_target,
+                                                                        sample_size=self.batch_size)
                 emb = self(samples)
                 loss += eta * self.build_backward_loss(emb, sampled_embedding_target.to(self.device))
             self.losses.append(loss.item())
             loss.backward()
             optimizer.step()
             if i % (1000 if self.max_iter > 2000 else 100) == 0 or i == self.max_iter-1:
-                print('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
+                self.logger.debug(f'iteration:{i}, loss: {loss.item()}')
             # if self.stop_training(processed_X):
             #     print('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
             #     break
@@ -452,11 +470,13 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
 class StackedGNN:
     def __init__(self, content, adjacency, layers,
                  overlooked_rates=None, eta=1, BP_count=0,
-                 device=None, labels=None, metric_func=None):
+                 device=None, labels=None, metric_func=None, logger=None, rank=None):
         # super(StackedGAE, self).__init__()
         self.adjacency = adjacency
         # remove self-loop
         self._remove_self_loop()
+        self.logger = logger
+        self.rank = rank
         self.layers = layers
         self.gnn_count = len(self.layers)
         self.eta = eta
@@ -494,7 +514,12 @@ class StackedGNN:
             elif layer_param.gnn_type is LayerParam.EGCN:
                 gnn = self._build_supervised_EGCN(input_dim, layer_param, overlooked_rate)
             assert gnn is not None
-            self.gnns.append(gnn)
+
+            ddp = get_ddp_setting()
+            if ddp:
+                self.gnns.append(DDP(gnn, device_ids=[self.rank], output_device=self.rank))
+            else:
+                self.gnns.append(gnn)
             input_dim = layer_param.neurons
 
     def _build_unsupervised_GNN(self, input_dim, layer_param, overlooked_rate=0.0):
@@ -528,9 +553,9 @@ class StackedGNN:
         if not self.is_BP:
             return embedding
         for i in range(self.BP_count):
-            print('\n Start the {}-th backward training'.format(i))
+            self.logger.debug('\n Start the {}-th backward training'.format(i))
             self.train_backward(input_contents)
-            print('\n Start the {}-th forward training'.format(i+1))
+            self.logger.debug('\n Start the {}-th forward training'.format(i+1))
             input_contents, embedding = self.train_forward(appro_target=True)
             # self.save_embedding(input_contents, embedding, 'embedding_{}.mat'.format(i))
             if self.labels is not None and self.can_invoke_metric_function():
@@ -545,12 +570,14 @@ class StackedGNN:
         # eta = eta * np.power(2, self.gnn_count)
         for i in range(self.gnn_count):
             input_contents.append(input_content)
-            print('---------------- Start training the {}-th GNN forward'.format(i))
+            self.logger.debug('---------------- Start training the {}-th GNN forward'.format(i))
             gnn = self.gnns[i]
             embedding_target = None 
             if appro_target and i < self.gnn_count - 1:
-                embedding_target = self.gnns[i + 1].expected_X
-            gnn.set_training_direction(False, reset_backward=(i != 0))
+                embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
+                    else self.gnns[i + 1].expected_X
+            gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
+                else gnn.set_training_direction(False, reset_backward=(i != 0))
             # gnn.set_training_direction(False, reset_backward=False)
             # eta /= 2
             # input_content = gnn.run(input_content, mask_rate, embedding_target=embedding_target, eta=eta)
@@ -562,13 +589,14 @@ class StackedGNN:
         embedding_target = None
         for i in reversed(range(self.gnn_count)):
             input_content = input_contents[i]
-            print('---------------- Start training the {}-th GNN (BACKWARD)'.format(i))
+            self.logger.debug('---------------- Start training the {}-th GNN (BACKWARD)'.format(i))
             gnn = self.gnns[i]
-            gnn.set_training_direction(True if i != 0 else False)
+            gnn.module.set_training_direction(True if i != 0 else False) if get_ddp_setting() \
+                else gnn.set_training_direction(True if i != 0 else False)
             self.train_single_gnn(gnn, input_content, embedding_target=embedding_target)
 
             # eta *= 2
-            embedding_target = gnn.expected_X
+            embedding_target = gnn.module.expected_X if get_ddp_setting() else gnn.expected_X
             assert embedding_target.requires_grad is False
 
     def can_invoke_metric_function(self):
@@ -584,7 +612,9 @@ class StackedGNN:
         return self.metric_func(inputA.cpu().detach().numpy(), inputB)
 
     def train_single_gnn(self, gnn, input_content, embedding_target=None, train=True):
-        return gnn.run(input_content, embedding_target=embedding_target, eta=self.eta, train=train)
+        return gnn.module.run(input_content, embedding_target=embedding_target, eta=self.eta, train=train) \
+            if get_ddp_setting() else\
+            gnn.run(input_content, embedding_target=embedding_target, eta=self.eta, train=train)
 
     def save_embedding(self, input_contents, embedding, file_name=None):
         save_embed = {}
@@ -598,14 +628,14 @@ class StackedGNN:
 class SupervisedStackedGNN(StackedGNN):
     def __init__(self, content, adjacency, layers, training_mask, val_mask=None,
                  labels=None, overlooked_rates=None, eta=1,
-                 BP_count=0, device=None,  metric_func=None):
+                 BP_count=0, device=None,  metric_func=None, logger=None, rank=None):
         assert labels is not None
         self.training_mask = training_mask
         self.val_mask = val_mask if val_mask is not None else self.training_mask
 
         super().__init__(content, adjacency, layers,
                          overlooked_rates=overlooked_rates, eta=eta, BP_count=BP_count,
-                         device=device, labels=labels, metric_func=metric_func)
+                         device=device, labels=labels, metric_func=metric_func, logger=logger, rank=rank)
 
     def _build_supervised_GNN(self, input_dim, layer_param, overlooked_rate=0.0):
         # overlooked_rate: Not implement for GCN
@@ -630,20 +660,22 @@ class SupervisedStackedGNN(StackedGNN):
         max_iter = layer_param.get('max_iter', 10)
         lam = layer_param.get('lam', 0)
         batch_size = layer_param.get('batch_size', 64)
-        return SingleLayerEmbeddingGCN(self.adjacency_tensor, self.labels, self.training_mask, input_dim, embedding_dim, val_mask=self.val_mask,
+        return SingleLayerEmbeddingGCN(self.adjacency_tensor, self.labels, self.training_mask, input_dim,
+                                       embedding_dim, val_mask=self.val_mask,
                               lam=lam, learning_rate=learning_rate, max_iter=max_iter, device=self.device,
                               batch_size=batch_size, inner_activation=inner_activation, activation=activation,
-                              regularization=RIDGE, order=conv_order)
+                              regularization=RIDGE, order=conv_order, logger=self.logger)
 
     def invoke_metric_function(self, inputA, inputB):
         gnn = self.gnns[-1]
-        prediction = gnn.predict(inputA)
-        return self.metric_func(prediction.cpu().detach().numpy(), inputB, self.val_mask)
+        prediction = gnn.module.predict(inputA) if get_ddp_setting() else gnn.predict(inputA)
+        return self.metric_func(prediction.cpu().detach().numpy(), inputB, self.val_mask,
+                                logger=self.logger, debug=True)
 
     def run(self):
         embedding = super().run()
         gnn = self.gnns[-1]
-        prediction = gnn.predict(embedding)
+        prediction = gnn.module.predict(embedding) if get_ddp_setting() else gnn.predict(embedding)
         return prediction.cpu().detach().numpy()
 
 
