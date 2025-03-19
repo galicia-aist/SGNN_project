@@ -113,7 +113,7 @@ class SingleLayerGNN(torch.nn.Module):
             samples: k * d 
         """
         sample_size = self.batch_size if num <= 0 else num
-        idx = torch.randperm(X.shape[0]).numpy()
+        idx = torch.randperm(X.shape[0], device=self.device)
         idx = idx[:sample_size]
         samples = X[idx, :].to(self.device)
         sampled_embedding_target = None if embedding_target is None else embedding_target.to(self.device)[idx, :]
