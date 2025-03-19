@@ -323,8 +323,9 @@ def get_logger():
         logs_dir = os.path.join(os.getcwd(), "logs")
         if not os.path.exists(logs_dir):
             os.makedirs(logs_dir)
+        log_path = f"{logs_dir}//{model}_{dataset_name}.log"
 
-    log_path = f"{logs_dir}//{model}_{dataset_name}.log"
+
 
     logger = logging.getLogger(model)
 
