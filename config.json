@@ -577,6 +577,7 @@
                 "eta": 1000,
                 "BP_count": 5,
                 "lam": 0.000001,
+                "isLarge": true,
                 "layers": [
                     {
                         "neurons": 128,
