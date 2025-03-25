@@ -644,7 +644,7 @@
                 "isLarge": true
             },
             "Arxiv": {
-                "epochs": 100,
+                "epochs": 1000,
                 "learning_rate": 0.01,
                 "batch_size_train": 1024,
                 "batch_size_test": 2048,
