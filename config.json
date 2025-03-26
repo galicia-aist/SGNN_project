@@ -628,8 +628,8 @@
                 "isLarge": false
             },
             "Reddit": {
-                "epochs": 100,
-                "learning_rate": 0.001,
+                "epochs": 500,
+                "learning_rate": 0.2,
                 "batch_size_train": 512,
                 "batch_size_test": 1024,
                 "weight_decay": 0.0005,
@@ -644,8 +644,8 @@
                 "isLarge": true
             },
             "Arxiv": {
-                "epochs": 500,
-                "learning_rate": 0.2,
+                "epochs": 1000,
+                "learning_rate": 0.01,
                 "batch_size_train": 1024,
                 "batch_size_test": 2048,
                 "weight_decay": 0.0005,
