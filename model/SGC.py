@@ -5,13 +5,18 @@ from torch.nn import Linear
 
 
 # Define the SGC model
+
 class SGC(torch.nn.Module):
     def __init__(self, data):
         super(SGC, self).__init__()
-        self.conv = SGConv(data.num_features, data.num_classes, K=2)  # K=2 means using a 2-hop neighborhood
+        hidden_dim = 64  # Specify the hidden dimension for the intermediate layer
+        self.conv1 = SGConv(data.num_features, hidden_dim, K=2)  # First layer
+        self.conv2 = SGConv(hidden_dim, data.num_classes, K=2)  # Second layer
 
     def forward(self, data):
-        x = self.conv(data.x, data.edge_index)
+        x = self.conv1(data.x, data.edge_index)
+        x = F.relu(x)  # Add non-linearity after the first layer
+        x = self.conv2(x, data.edge_index)
         return F.log_softmax(x, dim=1)
 
 
