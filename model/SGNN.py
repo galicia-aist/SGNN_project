@@ -50,7 +50,10 @@ class SingleLayerGNN(torch.nn.Module):
         self.b = utils.get_weight_initial([1, self.embedding_dim])
 
         # U (d * d) is the parameter matrix to tune the input
-        self.U = torch.nn.Parameter(torch.eye(self.input_dim), requires_grad=False)
+        if self.input_dim == 64:
+            self.U = torch.nn.Parameter(torch.eye(128)[:, :64], requires_grad=True)
+        else:
+            self.U = torch.nn.Parameter(torch.eye(self.input_dim), requires_grad=False)
 
     def set_training_direction(self, is_backward, X=None, reset_backward=True):
         self.U.requires_grad = is_backward
@@ -58,7 +61,10 @@ class SingleLayerGNN(torch.nn.Module):
         # Compute U, to decrease residuals, when forward training starts
         if (not is_backward) and reset_backward:
             # self._update_U(X)
-            self.U.data = torch.eye(self.U.shape[0]).to(self.device)
+            if self.input_dim == 64:
+                self.U.data = torch.eye(128, 64).to(self.device)
+            else:
+                self.U.data = torch.eye(self.U.shape[0]).to(self.device)
 
     # No use temporarily
     def _update_U(self, X):
@@ -71,6 +77,18 @@ class SingleLayerGNN(torch.nn.Module):
         self.U.data = U
 
     def forward(self, input_X):
+
+        if self.input_dim == 1433:
+            self.logger.debug(f"U shape: {self.U.shape}")
+            self.logger.debug(f"X shape: {input_X.shape}")
+        elif self.input_dim == 128:
+            self.logger.debug(f"U shape: {self.U.shape}")
+            self.logger.debug(f"X shape: {input_X.shape}")
+        elif self.input_dim == 64:
+            self.logger.debug(f"U shape: {self.U.shape}")
+            self.logger.debug(f"X shape: {input_X.shape}")
+
+
         tmp = self.inner_activation(self.compute_with_U(input_X))
 
         tmp = self.activation(tmp.matmul(self.W))
@@ -377,6 +395,7 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
 
     def compute_with_U(self, X):
         U = self.U
+        # self.logger.debug(f"U shape when computing: {self.U.shape}")
         expected_X = X.matmul(U)
         return expected_X
 
@@ -439,6 +458,8 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
         embedding = self(processed_X)
         processed_X = None
         torch.cuda.empty_cache()
+        if self.input_dim == 64:
+            pass
         self.expected_X = self.compute_with_U(X.to(self.device)).cpu().detach()
         return embedding.detach().cpu()
 
@@ -502,25 +523,51 @@ class StackedGNN:
 
     def _build_up(self):
         self.gnns = []
+        # build each sub layer
         input_dim = self.content.shape[1]
         for i in range(self.gnn_count):
             layer_param = self.layers[i]
-            overlooked_rate = self.overlooked_rates[i]
-            gnn = None
-            if layer_param.gnn_type is LayerParam.GAE:
-                gnn = self._build_unsupervised_GNN(input_dim, layer_param, overlooked_rate)
-            elif layer_param.gnn_type is LayerParam.GCN:
-                gnn = self._build_supervised_GNN(input_dim, layer_param, overlooked_rate)
-            elif layer_param.gnn_type is LayerParam.EGCN:
-                gnn = self._build_supervised_EGCN(input_dim, layer_param, overlooked_rate)
-            assert gnn is not None
+            if isinstance(layer_param, list):
+                sub_gnns = []
+                for j in range(len(layer_param)):
+                    sub_layer_param = layer_param[j]
+                    overlooked_rate = 0.0
+                    sub_gnn = None
+                    if sub_layer_param.gnn_type is LayerParam.GAE:
+                        sub_gnn = self._build_unsupervised_GNN(input_dim, sub_layer_param, overlooked_rate)
+                    elif sub_layer_param.gnn_type is LayerParam.GCN:
+                        sub_gnn = self._build_supervised_GNN(input_dim, sub_layer_param, overlooked_rate)
+                    elif sub_layer_param.gnn_type is LayerParam.EGCN:
+                        sub_gnn = self._build_supervised_EGCN(input_dim, sub_layer_param, overlooked_rate)
+                    assert sub_gnn is not None
 
-            ddp = get_ddp_setting()
-            if ddp:
-                self.gnns.append(DDP(gnn, device_ids=[self.rank], output_device=self.rank))
+                    ddp = get_ddp_setting()
+                    if ddp:
+                        sub_gnns.append(DDP(sub_gnn, device_ids=[self.rank], output_device=self.rank))
+                    else:
+                        sub_gnns.append(sub_gnn)
+                input_dim = layer_param[-1].neurons
+                self.gnns.append(sub_gnns)
+
             else:
-                self.gnns.append(gnn)
-            input_dim = layer_param.neurons
+                overlooked_rate = self.overlooked_rates[i]
+                gnn = None
+                if layer_param.gnn_type is LayerParam.GAE:
+                    gnn = self._build_unsupervised_GNN(input_dim, layer_param, overlooked_rate)
+                elif layer_param.gnn_type is LayerParam.GCN:
+                    gnn = self._build_supervised_GNN(input_dim, layer_param, overlooked_rate)
+                elif layer_param.gnn_type is LayerParam.EGCN:
+                    gnn = self._build_supervised_EGCN(input_dim, layer_param, overlooked_rate)
+                assert gnn is not None
+
+                ddp = get_ddp_setting()
+                if ddp:
+                    self.gnns.append(DDP(gnn, device_ids=[self.rank], output_device=self.rank))
+                else:
+                    self.gnns.append(gnn)
+                input_dim = layer_param.neurons
+            pass
+        pass
 
     def _build_unsupervised_GNN(self, input_dim, layer_param, overlooked_rate=0.0):
         embedding_dim = layer_param.neurons
@@ -574,14 +621,42 @@ class StackedGNN:
             gnn = self.gnns[i]
             embedding_target = None 
             if appro_target and i < self.gnn_count - 1:
-                embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
-                    else self.gnns[i + 1].expected_X
-            gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
-                else gnn.set_training_direction(False, reset_backward=(i != 0))
+                if isinstance(gnn, list):
+                    concat_embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
+                        else self.gnns[i + 1].expected_X
+                    chunked_embedding_target = list(torch.chunk(concat_embedding_target, 2, dim=1))
+                elif isinstance(self.gnns[i+1], list):
+                    embedding_target = self.gnns[i + 1][0].module.expected_X if get_ddp_setting() \
+                        else self.gnns[i + 1][0].expected_X
+                else:
+                    embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
+                        else self.gnns[i + 1].expected_X
+            if isinstance(gnn, list):
+                for sub_gnn in gnn:
+                    sub_gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
+                        else sub_gnn.set_training_direction(False, reset_backward=(i != 0))
+            else:
+                gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
+                    else gnn.set_training_direction(False, reset_backward=(i != 0))
             # gnn.set_training_direction(False, reset_backward=False)
             # eta /= 2
             # input_content = gnn.run(input_content, mask_rate, embedding_target=embedding_target, eta=eta)
-            input_content = self.train_single_gnn(gnn, input_content, embedding_target=embedding_target, train=train)
+            # train sub models and add the final concatinated result in input content
+            if isinstance(gnn, list):
+                sub_embeddings_to_concat = []
+                for j, sub_gnn in enumerate(gnn):
+                    if appro_target:
+                        sub_input_content = self.train_single_gnn(sub_gnn, input_content,
+                                                                  embedding_target=chunked_embedding_target[j],
+                                                                  train=train)
+                    else:
+                        sub_input_content = self.train_single_gnn(sub_gnn, input_content, embedding_target=embedding_target,
+                                                              train=train)
+                    sub_embeddings_to_concat.append(sub_input_content)
+                input_content = torch.cat(sub_embeddings_to_concat, dim=1)
+
+            else:
+                input_content = self.train_single_gnn(gnn, input_content, embedding_target=embedding_target, train=train)
         embedding = input_content
         return input_contents, embedding
 
@@ -591,12 +666,27 @@ class StackedGNN:
             input_content = input_contents[i]
             self.logger.debug('---------------- Start training the {}-th GNN (BACKWARD)'.format(i))
             gnn = self.gnns[i]
-            gnn.module.set_training_direction(True if i != 0 else False) if get_ddp_setting() \
-                else gnn.set_training_direction(True if i != 0 else False)
-            self.train_single_gnn(gnn, input_content, embedding_target=embedding_target)
+            if isinstance(gnn, list):
+                for sub_gnn in gnn:
+                    sub_gnn.module.set_training_direction(True if i != 0 else False) if get_ddp_setting() \
+                        else sub_gnn.set_training_direction(True if i != 0 else False)
+            else:
+                gnn.module.set_training_direction(True if i != 0 else False) if get_ddp_setting() \
+                    else gnn.set_training_direction(True if i != 0 else False)
+            # Train backward for sub models
+            if isinstance(gnn, list):
+                chunks = torch.chunk(embedding_target, 2, dim=1)
+                chunked_embeddings_targets = list(chunks)
+                for j, sub_gnn in enumerate(gnn):
+                    self.train_single_gnn(sub_gnn, input_content, embedding_target=chunked_embeddings_targets[j])
+            else:
+                self.train_single_gnn(gnn, input_content, embedding_target=embedding_target)
 
             # eta *= 2
-            embedding_target = gnn.module.expected_X if get_ddp_setting() else gnn.expected_X
+            if isinstance(gnn, list):
+                embedding_target = gnn[0].module.expected_X if get_ddp_setting() else gnn[0].expected_X
+            else:
+                embedding_target = gnn.module.expected_X if get_ddp_setting() else gnn.expected_X
             assert embedding_target.requires_grad is False
 
     def can_invoke_metric_function(self):
@@ -706,7 +796,7 @@ class WeightedCrossEntropyLoss(torch.nn.Module):
 class Func(torch.nn.Module):
     def __init__(self, func, **params):
         super(Func, self).__init__()
-        self.func = func 
+        self.func = func
         self.params = params
 
     def forward(self, X):

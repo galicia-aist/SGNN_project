@@ -1,5 +1,5 @@
 import os
-
+from model.SGNN import *
 import numpy as np
 import random
 import torch
@@ -350,3 +350,109 @@ def get_logger():
 def get_ddp_setting():
     with open("global_settings.json", "r") as file:
         return json.load(file)["ddp"]
+
+def construct_sgnn_layers(layer_config, is_large, lam):
+
+    layers = []
+
+    for layer in layer_config:
+
+        if isinstance(layer, list):
+            sub_layers = construct_sgnn_layers(layer, is_large, lam)
+            layers.append(sub_layers)
+
+        else:
+            current_layer_activation = layer["activation"]
+            current_layer_inner_act = layer["inner_act"]
+
+            chosen_act = get_activation(current_layer_activation)
+            chosen_inner_act = get_activation(current_layer_inner_act)
+
+            if is_large:
+                layer_to_add = LayerParam(layer["neurons"], inner_act=chosen_inner_act, act=chosen_act,
+                                          gnn_type=LayerParam.EGCN,
+                                          learning_rate=layer["learning_rate"],
+                                          max_iter=layer["max_iter"], lam=lam, batch_size=layer["batch_size"])
+            else:
+                layer_to_add = LayerParam(layer["neurons"], inner_act=chosen_inner_act, act=chosen_act,
+                                          gnn_type=LayerParam.EGCN,
+                                          learning_rate=layer["learning_rate"],
+                                          order=layer["order"], max_iter=layer["max_iter"],
+                                          lam=lam, batch_size=layer["batch_size"])
+
+            layers.append(layer_to_add)
+
+    return layers
+
+
+def get_activation(current_layer_activation):
+
+    if "tanh" in current_layer_activation:
+        chosen_activation = Func(torch.nn.functional.tanh)
+    elif "sigmoid" in current_layer_activation:
+        chosen_activation = Func(torch.nn.functional.sigmoid)
+    elif "linear" in current_layer_activation:
+        chosen_activation = Func(None)
+    elif "leaky" in current_layer_activation:
+        negative_slope = float(current_layer_activation.split("=")[1])
+        chosen_activation = Func(torch.nn.functional.leaky_relu, negative_slope=negative_slope)
+    elif current_layer_activation == "relu":
+        chosen_activation = Func(torch.nn.functional.relu)
+    else:
+        print("Not activation type set")
+        exit()
+
+    return chosen_activation
+
+class Func(torch.nn.Module):
+    def __init__(self, func, **params):
+        super(Func, self).__init__()
+        self.func = func
+        self.params = params
+
+    def forward(self, X):
+        return X if self.func is None else self.func(X, **self.params)
+
+    def __repr__(self):
+        s = '{}'.format('<linear' if self.func is None else self.func)
+        s = Func.process_func_name(s)
+        if self.params:
+            s = s + ' with ' + str(self.params)
+        return s
+
+    @staticmethod
+    def process_func_name(s):
+        s = s[1:]
+        s = s.split(' at')[0]
+        return '<{}>'.format(s)
+
+class LayerParam:
+    GAE = 0
+    GCN = 1
+    EGCN = 2
+    MASK_RATE = 'mask_rate'
+
+    def __init__(self, neurons, inner_act, act, gnn_type, **kwargs):
+        self.neurons = neurons
+        self.inner_activation = inner_act
+        self.activation = act
+        self.gnn_type = gnn_type
+        self.extra_params = kwargs
+
+    def __repr__(self) -> str:
+        s = 'Neurons: {}, inner_activation: {}, activations: {} '
+        s = s.format(self.neurons, self.inner_activation, self.activation)
+        if self.extra_params:
+            st = ' with parameters: {} '.format(self.extra_params)
+            s += st
+        st = 'error!'
+        if self.gnn_type == LayerParam.GAE:
+            st = 'type: GAE'
+        elif self.gnn_type == LayerParam.GCN:
+            st = 'type: GCN'
+        elif self.gnn_type == LayerParam.EGCN:
+            st = 'type: EGCN'
+        return s + st
+
+    def get(self, key, default):
+        return self.extra_params.get(key, default)

@@ -62,31 +62,7 @@ def run_classificaton_with_SGNN(rank, world_size, dataset_choice, config, return
 
     # ========== layers setting ==========
 
-    layer_number = 0
-    layers = []
-
-    for layer in layer_config:
-
-        current_layer_activation = layer["activation"]
-        current_layer_inner_act = layer["inner_act"]
-
-        chosen_act = get_activation(current_layer_activation)
-        chosen_inner_act = get_activation(current_layer_inner_act)
-
-        if is_large:
-            layer_to_add = LayerParam(layer["neurons"], inner_act=chosen_inner_act, act=chosen_act,
-                                      gnn_type=LayerParam.EGCN,
-                                      learning_rate=layer["learning_rate"],
-                                      max_iter=layer["max_iter"], lam=lam, batch_size=layer["batch_size"])
-        else:
-            layer_to_add = LayerParam(layer["neurons"], inner_act=chosen_inner_act, act=chosen_act,
-                                      gnn_type=LayerParam.EGCN,
-                                      learning_rate=layer["learning_rate"],
-                                      order=layer["order"], max_iter=layer["max_iter"],
-                                      lam=lam, batch_size=layer["batch_size"])
-
-        layers.append(layer_to_add)
-        layer_number = layer_number + 1
+    layers = utils.construct_sgnn_layers(layer_config, is_large, lam)
 
     # ========== overlook setting ==========
     overlook_rates = None
@@ -131,8 +107,14 @@ def run_classificaton_with_SGNN(rank, world_size, dataset_choice, config, return
     logger.info(finish_time.strftime("Process started at: " + "%Y-%m-%d %H:%M:%S"))
     logger.info(f"Training lasted {hours} hours, {minutes} minutes, {seconds} seconds")
     total_max_iter = 0
+    total_max_sub_iter = 0
     for layer in layer_config:
-        total_max_iter = total_max_iter + layer["max_iter"]
+        if isinstance(layer, list):
+            for sub_layer in layer:
+                total_max_sub_iter = total_max_sub_iter + sub_layer["max_iter"]
+            total_max_iter = total_max_iter + total_max_sub_iter
+        else:
+            total_max_iter = total_max_iter + layer["max_iter"]
 
     total_iterations = total_max_iter*((BP_count*2)+1)
     logger.info(f"Total iterations: {total_iterations}")
@@ -384,24 +366,7 @@ def run_clustering_with_SGNN(dataset_choice, config):
     return accuracy, efficiency, nmi, dataset_name
 
 
-def get_activation(current_layer_activation):
 
-    if "tanh" in current_layer_activation:
-        chosen_activation = Func(torch.nn.functional.tanh)
-    elif "sigmoid" in current_layer_activation:
-        chosen_activation = Func(torch.nn.functional.sigmoid)
-    elif "linear" in current_layer_activation:
-        chosen_activation = Func(None)
-    elif "leaky" in current_layer_activation:
-        negative_slope = float(current_layer_activation.split("=")[1])
-        chosen_activation = Func(torch.nn.functional.leaky_relu, negative_slope=negative_slope)
-    elif current_layer_activation == "relu":
-        chosen_activation = Func(torch.nn.functional.relu)
-    else:
-        print("Not activation type set")
-        exit()
-
-    return chosen_activation
 
 def ddp_setup(rank, world_size):
     """Train function for distributed training"""

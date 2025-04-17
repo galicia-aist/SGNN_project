@@ -205,7 +205,7 @@
                         "learning_rate": 0.01,
                         "max_iter": 60
                     },
-                    {
+                    [{
                         "neurons": 64,
                         "inner_act": "linear",
                         "activation": "relu",
@@ -214,6 +214,16 @@
                         "batch_size": 2708,
                         "max_iter": 60
                     },
+                        {
+                        "neurons": 64,
+                        "inner_act": "linear",
+                        "activation": "relu",
+                        "learning_rate": 0.01,
+                        "order": 1,
+                        "batch_size": 2708,
+                        "max_iter": 60
+                    }
+                    ],
                     {
                         "neurons": 32,
                         "inner_act": "linear",
