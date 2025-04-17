@@ -78,15 +78,15 @@ class SingleLayerGNN(torch.nn.Module):
 
     def forward(self, input_X):
 
-        if self.input_dim == 1433:
-            self.logger.debug(f"U shape: {self.U.shape}")
-            self.logger.debug(f"X shape: {input_X.shape}")
-        elif self.input_dim == 128:
-            self.logger.debug(f"U shape: {self.U.shape}")
-            self.logger.debug(f"X shape: {input_X.shape}")
-        elif self.input_dim == 64:
-            self.logger.debug(f"U shape: {self.U.shape}")
-            self.logger.debug(f"X shape: {input_X.shape}")
+        # if self.input_dim == 1433:
+        #     self.logger.debug(f"U shape: {self.U.shape}")
+        #     self.logger.debug(f"X shape: {input_X.shape}")
+        # elif self.input_dim == 128:
+        #     self.logger.debug(f"U shape: {self.U.shape}")
+        #     self.logger.debug(f"X shape: {input_X.shape}")
+        # elif self.input_dim == 64:
+        #     self.logger.debug(f"U shape: {self.U.shape}")
+        #     self.logger.debug(f"X shape: {input_X.shape}")
 
 
         tmp = self.inner_activation(self.compute_with_U(input_X))
@@ -440,6 +440,7 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
             samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels,
                                                                                  embedding_target=training_target)
             embedding = self(samples)
+            pass
             loss = self.build_loss(embedding, sampled_labels, sampled_embedding_target, eta=eta)
             if embedding_target is not None:
                 samples, sampled_embedding_target, _ = self.get_samples(processed_X, embedding_target=embedding_target,
@@ -456,10 +457,14 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
             #     break
         self.val_loss_queue.clear()
         embedding = self(processed_X)
-        processed_X = None
-        torch.cuda.empty_cache()
+        if self.input_dim == 1433:
+            pass
+        if self.input_dim == 128:
+            pass
         if self.input_dim == 64:
             pass
+        processed_X = None
+        torch.cuda.empty_cache()
         self.expected_X = self.compute_with_U(X.to(self.device)).cpu().detach()
         return embedding.detach().cpu()
 
