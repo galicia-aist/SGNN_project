@@ -627,15 +627,21 @@ class StackedGNN:
             gnn = self.gnns[i]
             embedding_target = None 
             if appro_target and i < self.gnn_count - 1:
-                if isinstance(gnn, list):
-                    embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
-                        else self.gnns[i + 1].expected_X
-                elif isinstance(self.gnns[i+1], list):
-                    embedding_target = self.gnns[i + 1][0].module.expected_X if get_ddp_setting() \
-                        else self.gnns[i + 1][0].expected_X
+                next_gnn = self.gnns[i+1]
+                # 1 - 2
+                if isinstance(next_gnn, list):
+                    embedding_target = sum(
+                        g.module.expected_X if get_ddp_setting() else g.expected_X
+                        for g in next_gnn
+                    )
+                # 2 - 2
+                elif isinstance(gnn, list) and isinstance(next_gnn, list):
+                    for g, n_g in zip(gnn, next_gnn):
+                        g.expected_X = n_g.module.expected_X if get_ddp_setting() else n_g.expected_X
+                # 1 - 1 or 2 - 1
                 else:
-                    embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
-                        else self.gnns[i + 1].expected_X
+                    embedding_target = next_gnn.module.expected_X if get_ddp_setting() \
+                        else next_gnn.expected_X
             if isinstance(gnn, list):
                 for sub_gnn in gnn:
                     sub_gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
@@ -655,17 +661,23 @@ class StackedGNN:
             # input_content = gnn.run(input_content, mask_rate, embedding_target=embedding_target, eta=eta)
             # train sub models and add the final concatinated result in input content
             if isinstance(gnn, list):
-                sub_embeddings_to_concat = []
+                sub_embeddings = []
                 for j, sub_gnn in enumerate(gnn):
                     if appro_target:
-                        sub_input_content = self.train_single_gnn(sub_gnn, input_content,
+                        sub_input_content = self.train_single_gnn(sub_gnn,
+                                                                  input_content[j] if isinstance(input_content, list)
+                                                                  else input_content,
                                                                   embedding_target=embedding_target,
                                                                   train=train)
                     else:
-                        sub_input_content = self.train_single_gnn(sub_gnn, input_content, embedding_target=embedding_target,
+                        sub_input_content = self.train_single_gnn(sub_gnn,  input_content[j] if isinstance(input_content, list)
+                                                                  else input_content, embedding_target=embedding_target,
                                                               train=train)
-                    sub_embeddings_to_concat.append(sub_input_content)
-                input_content = torch.cat(sub_embeddings_to_concat, dim=1)
+                    sub_embeddings.append(sub_input_content)
+                if isinstance(self.gnns[i+1], list):
+                    input_content = sub_embeddings
+                else:
+                    input_content = torch.cat(sub_embeddings, dim=1)
 
             else:
                 input_content = self.train_single_gnn(gnn, input_content, embedding_target=embedding_target, train=train)
@@ -687,8 +699,9 @@ class StackedGNN:
                     else gnn.set_training_direction(True if i != 0 else False)
             # Train backward for sub models
             if isinstance(gnn, list):
-                for sub_gnn in gnn:
-                    self.train_single_gnn(sub_gnn, input_content, embedding_target=embedding_target)
+                for j, sub_gnn in enumerate(gnn):
+                    self.train_single_gnn(sub_gnn, input_content[j] if isinstance(input_content, list)
+                                                                  else input_content, embedding_target=embedding_target)
             else:
                 self.train_single_gnn(gnn, input_content, embedding_target=embedding_target)
 

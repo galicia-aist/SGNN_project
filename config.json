@@ -196,7 +196,7 @@
                 "lam": 0.001,
                 "isLarge": false,
                 "layers": [
-                    {
+                    [{
                         "neurons": 128,
                         "inner_act": "linear",
                         "activation": "leaky_relu=0.1",
@@ -205,6 +205,15 @@
                         "learning_rate": 0.005,
                         "max_iter": 100
                     },
+                    {
+                        "neurons": 128,
+                        "inner_act": "linear",
+                        "activation": "leaky_relu=0.1",
+                        "order": 1,
+                        "batch_size": 1024,
+                        "learning_rate": 0.005,
+                        "max_iter": 100
+                    }],
                     [{
                         "neurons": 64,
                         "inner_act": "linear",
