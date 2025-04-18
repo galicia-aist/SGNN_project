@@ -199,29 +199,29 @@
                     {
                         "neurons": 128,
                         "inner_act": "linear",
-                        "activation": "leaky_relu=0.2",
+                        "activation": "leaky_relu=0.1",
                         "order": 1,
-                        "batch_size": 2708,
-                        "learning_rate": 0.01,
-                        "max_iter": 60
+                        "batch_size": 1024,
+                        "learning_rate": 0.005,
+                        "max_iter": 100
                     },
                     [{
                         "neurons": 64,
                         "inner_act": "linear",
                         "activation": "relu",
-                        "learning_rate": 0.01,
+                        "learning_rate": 0.005,
                         "order": 1,
-                        "batch_size": 2708,
-                        "max_iter": 60
+                        "batch_size": 1024,
+                        "max_iter": 100
                     },
                         {
                         "neurons": 64,
                         "inner_act": "linear",
                         "activation": "relu",
-                        "learning_rate": 0.01,
+                        "learning_rate": 0.005,
                         "order": 1,
-                        "batch_size": 2708,
-                        "max_iter": 60
+                        "batch_size": 1024,
+                        "max_iter": 100
                     }
                     ],
                     {
@@ -231,7 +231,7 @@
                         "learning_rate": 0.01,
                         "order": 2,
                         "batch_size": 140,
-                        "max_iter": 60
+                        "max_iter": 100
                     }
                 ]
             },
