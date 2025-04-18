@@ -241,15 +241,26 @@
                 "lam": 0.001,
                 "isLarge": false,
                 "layers": [
-                    {
-                        "neurons": 2024,
-                        "inner_act": "tanh",
-                        "activation": "relu",
-                        "learning_rate": 0.00001,
-                        "order": 3,
-                        "max_iter": 100,
-                        "batch_size": 256
-                    },
+                    [
+                        {
+                            "neurons": 2024,
+                            "inner_act": "tanh",
+                            "activation": "relu",
+                            "learning_rate": 0.00001,
+                            "order": 3,
+                            "max_iter": 100,
+                            "batch_size": 256
+                        },
+                        {
+                            "neurons": 2024,
+                            "inner_act": "tanh",
+                            "activation": "relu",
+                            "learning_rate": 0.00001,
+                            "order": 3,
+                            "max_iter": 100,
+                            "batch_size": 256
+                        }
+                    ],
                     {
                         "neurons": 64,
                         "inner_act": "tanh",
@@ -267,15 +278,26 @@
                 "lam": 0.001,
                 "isLarge": false,
                 "layers": [
-                    {
-                        "neurons": 256,
-                        "inner_act": "relu",
-                        "activation": "leaky_relu=0.2",
-                        "learning_rate": 0.01,
-                        "order": 1,
-                        "max_iter": 100,
-                        "batch_size": 8192
-                    },
+                    [
+                        {
+                            "neurons": 256,
+                            "inner_act": "relu",
+                            "activation": "leaky_relu=0.2",
+                            "learning_rate": 0.01,
+                            "order": 1,
+                            "max_iter": 100,
+                            "batch_size": 8192
+                        },
+                        {
+                            "neurons": 256,
+                            "inner_act": "relu",
+                            "activation": "leaky_relu=0.2",
+                            "learning_rate": 0.01,
+                            "order": 1,
+                            "max_iter": 100,
+                            "batch_size": 8192
+                        }
+                    ],
                     {
                         "neurons": 128,
                         "inner_act": "relu",

@@ -50,19 +50,16 @@ class SingleLayerGNN(torch.nn.Module):
         self.b = utils.get_weight_initial([1, self.embedding_dim])
 
         # U (d * d) is the parameter matrix to tune the input
-        if self.input_dim == 64:
-            self.U = torch.nn.Parameter(torch.eye(128)[:, :64], requires_grad=True)
-        else:
-            self.U = torch.nn.Parameter(torch.eye(self.input_dim), requires_grad=False)
+        self.U = torch.nn.Parameter(torch.eye(self.input_dim), requires_grad=False)
 
-    def set_training_direction(self, is_backward, X=None, reset_backward=True):
+    def set_training_direction(self, is_backward, X=None, reset_backward=True, previous_output_dim=0):
         self.U.requires_grad = is_backward
 
         # Compute U, to decrease residuals, when forward training starts
         if (not is_backward) and reset_backward:
             # self._update_U(X)
-            if self.input_dim == 64:
-                self.U.data = torch.eye(128, 64).to(self.device)
+            if previous_output_dim != 0:
+                self.U.data = torch.eye(previous_output_dim*2, self.input_dim).to(self.device)
             else:
                 self.U.data = torch.eye(self.U.shape[0]).to(self.device)
 
@@ -644,8 +641,15 @@ class StackedGNN:
                     sub_gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
                         else sub_gnn.set_training_direction(False, reset_backward=(i != 0))
             else:
-                gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
-                    else gnn.set_training_direction(False, reset_backward=(i != 0))
+                if (isinstance(self.gnns[i-1], list) and not isinstance(self.gnns[i], list)):
+                    # self.logger.debug("this is a layer that will process concat input")
+                    gnn.module.set_training_direction(False, reset_backward=(i != 0),
+                                                      previous_output_dim=self.gnns[i-1][0].embedding_dim) if get_ddp_setting() \
+                        else gnn.set_training_direction(False, reset_backward=(i != 0),
+                                                        previous_output_dim=self.gnns[i-1][0].embedding_dim)
+                else:
+                    gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
+                        else gnn.set_training_direction(False, reset_backward=(i != 0))
             # gnn.set_training_direction(False, reset_backward=False)
             # eta /= 2
             # input_content = gnn.run(input_content, mask_rate, embedding_target=embedding_target, eta=eta)
