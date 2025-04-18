@@ -429,6 +429,8 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
             self.expected_X = expected_X
             return embedding.detach()
         training_X = processed_X[self.training_mask, :]
+        if (embedding_target is not None and self.input_dim == 128):
+            pass
         training_target = None if embedding_target is None else embedding_target[self.training_mask.to
                                                                                  (embedding_target.device), :]
         training_labels = self.labels[self.training_mask]
@@ -437,6 +439,8 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
         for i in range(self.max_iter):
             optimizer.zero_grad()
             # sampling
+            if (embedding_target is not None and self.input_dim == 128):
+                pass
             samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels,
                                                                                  embedding_target=training_target)
             embedding = self(samples)
@@ -627,9 +631,8 @@ class StackedGNN:
             embedding_target = None 
             if appro_target and i < self.gnn_count - 1:
                 if isinstance(gnn, list):
-                    concat_embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
+                    embedding_target = self.gnns[i + 1].module.expected_X if get_ddp_setting() \
                         else self.gnns[i + 1].expected_X
-                    chunked_embedding_target = list(torch.chunk(concat_embedding_target, 2, dim=1))
                 elif isinstance(self.gnns[i+1], list):
                     embedding_target = self.gnns[i + 1][0].module.expected_X if get_ddp_setting() \
                         else self.gnns[i + 1][0].expected_X
@@ -652,7 +655,7 @@ class StackedGNN:
                 for j, sub_gnn in enumerate(gnn):
                     if appro_target:
                         sub_input_content = self.train_single_gnn(sub_gnn, input_content,
-                                                                  embedding_target=chunked_embedding_target[j],
+                                                                  embedding_target=embedding_target,
                                                                   train=train)
                     else:
                         sub_input_content = self.train_single_gnn(sub_gnn, input_content, embedding_target=embedding_target,
@@ -680,10 +683,8 @@ class StackedGNN:
                     else gnn.set_training_direction(True if i != 0 else False)
             # Train backward for sub models
             if isinstance(gnn, list):
-                chunks = torch.chunk(embedding_target, 2, dim=1)
-                chunked_embeddings_targets = list(chunks)
-                for j, sub_gnn in enumerate(gnn):
-                    self.train_single_gnn(sub_gnn, input_content, embedding_target=chunked_embeddings_targets[j])
+                for sub_gnn in gnn:
+                    self.train_single_gnn(sub_gnn, input_content, embedding_target=embedding_target)
             else:
                 self.train_single_gnn(gnn, input_content, embedding_target=embedding_target)
 
