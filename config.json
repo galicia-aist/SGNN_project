@@ -195,6 +195,7 @@
                 "BP_count": 5,
                 "lam": 0.001,
                 "isLarge": false,
+                "operation": "add",
                 "layers": [
                     [{
                         "neurons": 128,
@@ -249,6 +250,7 @@
                 "BP_count": 3,
                 "lam": 0.001,
                 "isLarge": false,
+                "operation": "add",
                 "layers": [
                     [
                         {
@@ -286,6 +288,7 @@
                 "BP_count": 3,
                 "lam": 0.001,
                 "isLarge": false,
+                "operation": "add",
                 "layers": [
                     [
                         {

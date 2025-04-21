@@ -52,13 +52,13 @@ class SingleLayerGNN(torch.nn.Module):
         # U (d * d) is the parameter matrix to tune the input
         self.U = torch.nn.Parameter(torch.eye(self.input_dim), requires_grad=False)
 
-    def set_training_direction(self, is_backward, X=None, reset_backward=True, previous_output_dim=0):
+    def set_training_direction(self, is_backward, X=None, reset_backward=True, previous_output_dim=0, mmop=None):
         self.U.requires_grad = is_backward
 
         # Compute U, to decrease residuals, when forward training starts
         if (not is_backward) and reset_backward:
             # self._update_U(X)
-            if previous_output_dim != 0:
+            if previous_output_dim != 0 and mmop == "concat":
                 self.U.data = torch.eye(previous_output_dim*2, self.input_dim).to(self.device)
             else:
                 self.U.data = torch.eye(self.U.shape[0]).to(self.device)
@@ -497,7 +497,7 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
 class StackedGNN:
     def __init__(self, content, adjacency, layers,
                  overlooked_rates=None, eta=1, BP_count=0,
-                 device=None, labels=None, metric_func=None, logger=None, rank=None):
+                 device=None, labels=None, metric_func=None, logger=None, rank=None, mmop=None):
         # super(StackedGAE, self).__init__()
         self.adjacency = adjacency
         # remove self-loop
@@ -507,6 +507,7 @@ class StackedGNN:
         self.layers = layers
         self.gnn_count = len(self.layers)
         self.eta = eta
+        self.mmop = mmop
         if device is None:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         else:
@@ -650,9 +651,9 @@ class StackedGNN:
                 if (isinstance(self.gnns[i-1], list) and not isinstance(self.gnns[i], list)):
                     # self.logger.debug("this is a layer that will process concat input")
                     gnn.module.set_training_direction(False, reset_backward=(i != 0),
-                                                      previous_output_dim=self.gnns[i-1][0].embedding_dim) if get_ddp_setting() \
+                                                      previous_output_dim=self.gnns[i-1][0].embedding_dim, mmop=self.mmop) if get_ddp_setting() \
                         else gnn.set_training_direction(False, reset_backward=(i != 0),
-                                                        previous_output_dim=self.gnns[i-1][0].embedding_dim)
+                                                        previous_output_dim=self.gnns[i-1][0].embedding_dim, mmop=self.mmop)
                 else:
                     gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
                         else gnn.set_training_direction(False, reset_backward=(i != 0))
@@ -677,7 +678,13 @@ class StackedGNN:
                 if isinstance(self.gnns[i+1], list):
                     input_content = sub_embeddings
                 else:
-                    input_content = torch.cat(sub_embeddings, dim=1)
+                    if self.mmop == "concat":
+                        input_content = torch.cat(sub_embeddings, dim=1)
+                    elif self.mmop == "add":
+                        input_content = sum(sub_embeddings)
+                    else:
+                        raise KeyError("Operation type invalid")
+
 
             else:
                 input_content = self.train_single_gnn(gnn, input_content, embedding_target=embedding_target, train=train)
@@ -693,7 +700,7 @@ class StackedGNN:
             if isinstance(gnn, list):
                 for sub_gnn in gnn:
                     sub_gnn.module.set_training_direction(True if i != 0 else False) if get_ddp_setting() \
-                        else sub_gnn.set_training_direction(True if i != 0 else False)
+                        else sub_gnn.set_training_direction(True if i != 0 else False, mmop=self.mmop)
             else:
                 gnn.module.set_training_direction(True if i != 0 else False) if get_ddp_setting() \
                     else gnn.set_training_direction(True if i != 0 else False)
@@ -741,14 +748,14 @@ class StackedGNN:
 class SupervisedStackedGNN(StackedGNN):
     def __init__(self, content, adjacency, layers, training_mask, val_mask=None,
                  labels=None, overlooked_rates=None, eta=1,
-                 BP_count=0, device=None,  metric_func=None, logger=None, rank=None):
+                 BP_count=0, device=None,  metric_func=None, logger=None, rank=None, mmop=None):
         assert labels is not None
         self.training_mask = training_mask
         self.val_mask = val_mask if val_mask is not None else self.training_mask
 
         super().__init__(content, adjacency, layers,
                          overlooked_rates=overlooked_rates, eta=eta, BP_count=BP_count,
-                         device=device, labels=labels, metric_func=metric_func, logger=logger, rank=rank)
+                         device=device, labels=labels, metric_func=metric_func, logger=logger, rank=rank, mmop=mmop)
 
     def _build_supervised_GNN(self, input_dim, layer_param, overlooked_rate=0.0):
         # overlooked_rate: Not implement for GCN

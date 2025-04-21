@@ -60,6 +60,12 @@ def run_classificaton_with_SGNN(rank, world_size, dataset_choice, config, return
     layer_config = config["layers"]
     lam = config["lam"]
 
+    try:
+        operation_type = config["operation"]
+    except (KeyError, TypeError):
+        operation_type = None
+
+
     # ========== layers setting ==========
 
     layers = utils.construct_sgnn_layers(layer_config, is_large, lam)
@@ -71,7 +77,8 @@ def run_classificaton_with_SGNN(rank, world_size, dataset_choice, config, return
                                 training_mask=train_mask, val_mask=test_mask,
                                 overlooked_rates=overlook_rates,
                                 BP_count=BP_count, eta=eta, device=device,
-                                labels=labels, metric_func=utils.classification, logger=logger, rank=rank)
+                                labels=labels, metric_func=utils.classification, logger=logger, rank=rank,
+                                mmop=operation_type)
 
     if ddp and rank == 0 or not ddp:
         utils.print_SGNN_info(sgnn, logger=logger)
