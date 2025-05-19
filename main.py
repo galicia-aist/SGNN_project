@@ -3,6 +3,7 @@ import json
 from utils import sample_hyperparams, set_arg_parser, get_logger
 import torch
 import torch.multiprocessing as mp
+import utils
 
 def run_experiment(cuda_num, exp_times, config, dataset_decision, model_decision, is_DDP, logger=None):
     accuracy_list = []
@@ -146,6 +147,14 @@ if __name__ == "__main__":
     logger.info(f"CUDA active: {torch.cuda.is_available()}")  # Check if CUDA is detected
     logger.info(f"Pytorch version: {torch.version.__version__}")  # Check PyTorch version
     logger.info(f"DDP: {ddp}")  # Check PyTorch version
+
+
+    mm_structure = "2-2-1"
+    operation_type = "concat"
+
+    if mm_structure is not None:
+        utils.modify_and_update_config(dataset_decision, task_type, model_decision, mm_structure,
+                                       operation_type=operation_type)
 
 
 

@@ -52,14 +52,15 @@ class SingleLayerGNN(torch.nn.Module):
         # U (d * d) is the parameter matrix to tune the input
         self.U = torch.nn.Parameter(torch.eye(self.input_dim), requires_grad=False)
 
-    def set_training_direction(self, is_backward, X=None, reset_backward=True, previous_output_dim=0, mmop=None):
+    def set_training_direction(self, is_backward, X=None, reset_backward=True, previous_output_dim=0, mmop=None,
+                               previous_layer_count=None):
         self.U.requires_grad = is_backward
 
         # Compute U, to decrease residuals, when forward training starts
         if (not is_backward) and reset_backward:
             # self._update_U(X)
             if previous_output_dim != 0 and mmop == "concat":
-                self.U.data = torch.eye(previous_output_dim*2, self.input_dim).to(self.device)
+                self.U.data = torch.eye(previous_output_dim*previous_layer_count, self.input_dim).to(self.device)
             else:
                 self.U.data = torch.eye(self.U.shape[0]).to(self.device)
 
@@ -74,16 +75,6 @@ class SingleLayerGNN(torch.nn.Module):
         self.U.data = U
 
     def forward(self, input_X):
-
-        # if self.input_dim == 1433:
-        #     self.logger.debug(f"U shape: {self.U.shape}")
-        #     self.logger.debug(f"X shape: {input_X.shape}")
-        # elif self.input_dim == 128:
-        #     self.logger.debug(f"U shape: {self.U.shape}")
-        #     self.logger.debug(f"X shape: {input_X.shape}")
-        # elif self.input_dim == 64:
-        #     self.logger.debug(f"U shape: {self.U.shape}")
-        #     self.logger.debug(f"X shape: {input_X.shape}")
 
 
         tmp = self.inner_activation(self.compute_with_U(input_X))
@@ -651,9 +642,9 @@ class StackedGNN:
                 if (isinstance(self.gnns[i-1], list) and not isinstance(self.gnns[i], list)):
                     # self.logger.debug("this is a layer that will process concat input")
                     gnn.module.set_training_direction(False, reset_backward=(i != 0),
-                                                      previous_output_dim=self.gnns[i-1][0].embedding_dim, mmop=self.mmop) if get_ddp_setting() \
+                                                      previous_output_dim=self.gnns[i-1][0].embedding_dim, previous_layer_count=len(self.gnns[i-1]), mmop=self.mmop) if get_ddp_setting() \
                         else gnn.set_training_direction(False, reset_backward=(i != 0),
-                                                        previous_output_dim=self.gnns[i-1][0].embedding_dim, mmop=self.mmop)
+                                                        previous_output_dim=self.gnns[i-1][0].embedding_dim, previous_layer_count=len(self.gnns[i-1]), mmop=self.mmop)
                 else:
                     gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
                         else gnn.set_training_direction(False, reset_backward=(i != 0))

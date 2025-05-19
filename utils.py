@@ -385,6 +385,66 @@ def construct_sgnn_layers(layer_config, is_large, lam):
     return layers
 
 
+def modify_and_update_config(dataset_choice, task_type, model_decision, structure, operation_type=None):
+    """
+    Modify and update the configuration for a given dataset choice based on the structure.
+
+    :param dataset_choice: Dataset key to select within [model_decision][task_type].
+    :param task_type: Task type, e.g., "Classification".
+    :param model_decision: Model key, e.g., "SGNN".
+    :param structure: User input string like "2-2-1".
+    :param operation_type: The operation to be added when duplicate layers exist, e.g., "add" or "concat".
+    :return: Updated configuration JSON.
+    :raises ValueError: If the structure is invalid or the dataset choice is not found.
+    """
+    # Load the JSON file
+    with open("config.json", 'r') as file:
+        config = json.load(file)
+
+    # Navigate to the dataset-specific configuration
+    try:
+        dataset_config = config[model_decision][task_type][dataset_choice]
+    except KeyError:
+        raise ValueError(f"Dataset choice '{dataset_choice}' not found in config file.")
+
+    # Parse the structure string
+    structure_counts = [int(x) for x in structure.split('-')]
+
+    # Validate structure
+    if len(structure_counts) < len(dataset_config['layers']):
+        raise ValueError("Structure length must not be less than the number of original layers.")
+
+    # Handle cases with fewer layers in the original config
+    while len(dataset_config['layers']) < len(structure_counts):
+        # Duplicate the first layer for additional layers
+        dataset_config['layers'].insert(1, dataset_config['layers'][0].copy())
+
+    # Create the modified configuration
+    modified_layers = []
+    for i, count in enumerate(structure_counts):
+        # Get the base layer (existing or added)
+        base_layer = dataset_config['layers'][i]
+
+        # Duplicate the layer configuration
+        modified_layers.append([base_layer.copy() for _ in range(count)])
+
+    # Flatten layers with a single duplicate to keep the structure consistent
+    modified_layers = [layer[0] if len(layer) == 1 else layer for layer in modified_layers]
+
+    # Update the configuration
+    dataset_config['layers'] = modified_layers
+
+    # Add the "operation" key if operation_type is provided
+    if operation_type:
+        dataset_config['operation'] = operation_type
+
+    # Save the updated configuration back to the file
+    with open("config.json", 'w') as file:
+        json.dump(config, file, indent=4)
+
+    return config
+
+
 def get_activation(current_layer_activation):
 
     if "tanh" in current_layer_activation:
