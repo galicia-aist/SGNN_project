@@ -258,6 +258,8 @@ def set_arg_parser():
     parser.add_argument("--log_path", type=str, help="Where you want to store the logs")
     parser.add_argument("--tuning", type=int, help="How many times you want to tune the hyperparameters")
     parser.add_argument("--ddp", action="store_true", default=False, help="Use Distributed Data Parallelism")
+    parser.add_argument("--mm_op", default=None, type=str, help="Concat or Add")
+    parser.add_argument("--mm_structure", default=None, type=str, help="1-2-1, 2-2-1, etc")
     args = parser.parse_args()
 
     cuda_num = args.cuda_num
@@ -268,8 +270,11 @@ def set_arg_parser():
     log_path = args.log_path
     is_tuning = args.tuning
     ddp = args.ddp
+    mm_op = args.mm_op
+    mm_structure = args.mm_structure
 
-    return cuda_num, dataset_decision, model_decision, task_type, exp_times, log_path, is_tuning, ddp
+    return (cuda_num, dataset_decision, model_decision, task_type, exp_times, log_path, is_tuning, ddp, mm_op,
+            mm_structure)
 
 
 class CustomFormatter(logging.Formatter):
@@ -414,6 +419,24 @@ def modify_and_update_config(dataset_choice, task_type, model_decision, structur
     if len(structure_counts) < len(dataset_config['layers']):
         raise ValueError("Structure length must not be less than the number of original layers.")
 
+    # Check if the current structure and operation already match the desired configuration
+    current_structure = [
+        len(layer) if isinstance(layer, list) else 1
+        for layer in dataset_config['layers']
+    ]
+
+    if current_structure == structure_counts:
+        # Check if only the operation needs to be updated
+        if dataset_config.get('operation') != operation_type:
+            dataset_config['operation'] = operation_type
+            print("Updated the operation type without modifying the layer structure.")
+            with open("config.json", 'w') as file:
+                json.dump(config, file, indent=4)
+            return config
+
+        print("The desired structure and operation are already in place. No changes made.")
+        return config
+
     # Handle cases with fewer layers in the original config
     while len(dataset_config['layers']) < len(structure_counts):
         # Duplicate the first layer for additional layers
@@ -434,7 +457,7 @@ def modify_and_update_config(dataset_choice, task_type, model_decision, structur
     # Update the configuration
     dataset_config['layers'] = modified_layers
 
-    # Add the "operation" key if operation_type is provided
+    # Add or update the "operation" key if operation_type is provided
     if operation_type:
         dataset_config['operation'] = operation_type
 
@@ -443,6 +466,7 @@ def modify_and_update_config(dataset_choice, task_type, model_decision, structur
         json.dump(config, file, indent=4)
 
     return config
+
 
 
 def get_activation(current_layer_activation):

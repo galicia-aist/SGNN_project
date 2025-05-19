@@ -87,7 +87,8 @@ def run_experiment(cuda_num, exp_times, config, dataset_decision, model_decision
     return average_accuracy, average_efficiency, average_nmi, average_time_taken
 
 
-def main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp, logger=None):
+def main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp, mm_op, mm_structure,
+         logger=None):
 
     if isTuning is None:
         with open('./config.json', 'r') as file:
@@ -118,10 +119,13 @@ def main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTun
         logger.info(f"Best efficiency: {min(tuning_efficiency_list)}")
         logger.info(f"All the times taken: {tuning_efficiency_list}")
         logger.info(f"Best time taken: {min(tuning_time_taken_list)}")
+        logger.info(f"Multi-model operation: {mm_op}")
+        logger.info(f"Multi-model structure: {mm_structure}")
 
 
 if __name__ == "__main__":
-    cuda_num, dataset_decision, model_decision, task_type, exp_times, logPath, isTuning, ddp = set_arg_parser()
+    (cuda_num, dataset_decision, model_decision, task_type, exp_times,
+     logPath, isTuning, ddp, mm_op, mm_structure) = set_arg_parser()
 
     logger_settings = {
         "logger": {
@@ -147,15 +151,18 @@ if __name__ == "__main__":
     logger.info(f"CUDA active: {torch.cuda.is_available()}")  # Check if CUDA is detected
     logger.info(f"Pytorch version: {torch.version.__version__}")  # Check PyTorch version
     logger.info(f"DDP: {ddp}")  # Check PyTorch version
+    logger.info(f"Multi-Model Operation: {mm_op}")  # Check PyTorch version
+    logger.info(f"Multi-Model Structure: {mm_structure}")  # Check PyTorch version
 
 
-    mm_structure = "2-2-1"
-    operation_type = "concat"
+    mm_structure = "1-8-1"
+    mm_op = "concat"
 
     if mm_structure is not None:
         utils.modify_and_update_config(dataset_decision, task_type, model_decision, mm_structure,
-                                       operation_type=operation_type)
+                                       operation_type=mm_op)
 
 
 
-    main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, ddp, logger=logger)
+    main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, ddp, mm_op, mm_structure,
+         logger=logger)
