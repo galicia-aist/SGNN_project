@@ -68,16 +68,44 @@ python main.py --cuda_num=0 --data="Reddit" --model=SGNN --task="Classification"
 ```
 # SGNN Script Arguments
 
-| Argument     | Type  | Required | Description                                                       |
-|--------------|------|----------|-------------------------------------------------------------------|
-| `--cuda_num` | str  | Yes      | Specifies the GPU device to use for computation.                  |
-| `--data`     | str  | Yes      | Name of the dataset to be used in the experiment.                 |
-| `--task`     | str  | Yes      | Defines the type of task: `classification` or `clustering`.       |
-| `--model`    | str  | Yes      | Defines the type of model to use: `SGNN`, `SGC`, and `GCN`.       |
-| `--log_path` | str  | Yes      | Specifies where to store log data.                                |
-| `--exp`      | int  | Yes      | Number of times to run the experiment for statistical validation. |
-| `--tuning`   | int  | No       | Number of iterations for hyperparameter tuning (if applicable).   |
+| Argument         | Type   | Required | Description                                                                                     |
+|------------------|--------|----------|-------------------------------------------------------------------------------------------------|
+| `--cuda_num`     | str    | Yes      | Specifies the GPU device to use for computation.                                               |
+| `--model`        | str    | Yes      | Defines the type of model to use. Choices: `SGNN`, `SGC`, `GCN`.                               |
+| `--data`         | str    | Yes      | Name of the dataset to be used in the experiment. Choices include popular graph datasets.       |
+| `--task`         | str    | Yes      | Defines the type of task. Options: `classification` or `clustering`.                           |
+| `--exp`          | int    | Yes      | Specifies the number of times to run the experiment for statistical validation.                |
+| `--log_path`     | str    | No       | Path to store log data.                                                                        |
+| `--tuning`       | int    | No       | Number of iterations for hyperparameter tuning (if applicable).                                |
+| `--ddp`          | flag   | No       | Enables Distributed Data Parallelism (DDP). Default is False.                                  |
+| `--mm_op`        | str    | No       | Specifies the operation for multi-model configurations. Options: `concat` or `add`.            |
+| `--mm_structure` | str    | No       | Defines the multi-model structure, such as `1-2-1`, `2-2-1`, etc.                              |
+| `--log_level`    | str    | No       | Sets the logging level. Choices: `info` (default) or `debug`.                                  |
 
+
+
+# Available Datasets
+
+| Name               | Nodes         | Edges          | Node Features | Classes |
+|--------------------|---------------|----------------|---------------|---------|
+| Cora               | 2,708         | 10,556         | 1,433         | 7       |
+| Citeseer           | 3,327         | 9,104          | 3,703         | 6       |
+| Pubmed             | 19,717        | 88,864         | 500           | 3       |
+| Amazon Computers   | 13,752        | 491,722        | 767           | 10      |
+| Amazon Photos      | 7,650         | 238,162        | 745           | 8       |
+| Flickr             | 89,250        | 899,756        | 500           | 7       |
+| LastFMAsia         | 7,624         | 55,612         | 128           | 18      |
+| Actor              | 7,600         | 30,019         | 932           | 5       |
+| FacebookPagePage   | 22,470        | 342,004        | 128           | 4       |
+| DeezerEurope       | 28,281        | 185,504        | 128           | 2       |
+| Reddit             | 232,965       | 113,615,892    | 602           | 41      |
+| Arxiv              | 169,343       | 1,166,243      | 128           | 40      |
+| Products           | 2,449,029     | 61,859,140     | 100           | 47      |
+| Yelp               | 716,847       | 13,954,819     | 300           | 100     |
+| MAG                | 736,389       | 5,416,217      | 128           | 349     |
+| ogbn-proteins      | 132,534       | 39,561,252     | 8 (edge)      | 112     |
+| ogbn-arxiv         | 169,343       | 1,166,243      | 128           | 40      |
+| ogbn-papers100M    | 111,059,956   | 1,615,685,872  | 128           | 172     |
 
 
 ## How to get required data for reddit

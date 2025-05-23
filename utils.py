@@ -242,14 +242,14 @@ def set_arg_parser():
     parser.add_argument(
         "--model",
         type=str,
-        choices=ALLOWED_MODELS,  # Restricts choices
+        choices=ALLOWED_MODELS,
         required=True,
         help=f"Model name (choices: {', '.join(ALLOWED_MODELS)})"
     )
     parser.add_argument(
         "--data",
         type=str,
-        choices=ALLOWED_DATASETS,  # Restricts choices
+        choices=ALLOWED_DATASETS,
         required=True,
         help=f"Dataset name (choices: {', '.join(ALLOWED_DATASETS)})"
     )
@@ -260,21 +260,18 @@ def set_arg_parser():
     parser.add_argument("--ddp", action="store_true", default=False, help="Use Distributed Data Parallelism")
     parser.add_argument("--mm_op", default=None, type=str, help="Concat or Add")
     parser.add_argument("--mm_structure", default=None, type=str, help="1-2-1, 2-2-1, etc")
+    parser.add_argument(
+        "--log_level",
+        type=str,
+        choices=["info", "debug"],
+        default="info",
+        help="Set the logging level (default: info)"
+    )
     args = parser.parse_args()
 
-    cuda_num = args.cuda_num
-    dataset_decision = args.data
-    model_decision = args.model
-    task_type = args.task
-    exp_times = args.exp
-    log_path = args.log_path
-    is_tuning = args.tuning
-    ddp = args.ddp
-    mm_op = args.mm_op
-    mm_structure = args.mm_structure
+    return (args.cuda_num, args.data, args.model, args.task, args.exp, args.log_path,
+            args.tuning, args.ddp, args.mm_op, args.mm_structure, args.log_level)
 
-    return (cuda_num, dataset_decision, model_decision, task_type, exp_times, log_path, is_tuning, ddp, mm_op,
-            mm_structure)
 
 
 class CustomFormatter(logging.Formatter):
@@ -323,6 +320,7 @@ def get_logger():
     model = logger_settings["model"]
     log_path = logger_settings["log_path"]
     dataset_name = logger_settings["dataset"]
+    log_level = logger_settings["log_level"]
 
     if log_path == "local":
         logs_dir = os.path.join(os.getcwd(), "logs")
@@ -330,25 +328,22 @@ def get_logger():
             os.makedirs(logs_dir)
         log_path = f"{logs_dir}//{model}Concat_{dataset_name}.log"
 
-
-
     logger = logging.getLogger(model)
 
-    # Check if handlers already exist (to prevent duplication)
     if not logger.handlers:
-        # File handler (logs to file)
+        # File handler
         file_handler = logging.FileHandler(log_path)
         file_handler.setFormatter(CustomFormatter())
 
-        # Console handler (prints to console)
+        # Console handler
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(CustomFormatter())
 
-        # Add handlers to logger
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
-        logger.setLevel(logging.INFO)
+        # Set the logger level dynamically
+        logger.setLevel(logging.DEBUG if log_level == "DEBUG" else logging.INFO)
 
     return logger
 
@@ -390,28 +385,16 @@ def construct_sgnn_layers(layer_config, is_large, lam):
     return layers
 
 
-def modify_and_update_config(dataset_choice, task_type, model_decision, structure, operation_type=None):
+def modify_and_return_config(dataset_config, structure, operation_type):
     """
-    Modify and update the configuration for a given dataset choice based on the structure.
+    Modify and return the configuration for a given dataset based on the structure.
 
-    :param dataset_choice: Dataset key to select within [model_decision][task_type].
-    :param task_type: Task type, e.g., "Classification".
-    :param model_decision: Model key, e.g., "SGNN".
+    :param dataset_config: The configuration dictionary for the specific dataset.
     :param structure: User input string like "2-2-1".
     :param operation_type: The operation to be added when duplicate layers exist, e.g., "add" or "concat".
-    :return: Updated configuration JSON.
-    :raises ValueError: If the structure is invalid or the dataset choice is not found.
+    :return: Modified dataset configuration.
+    :raises ValueError: If the structure is invalid.
     """
-    # Load the JSON file
-    with open("config.json", 'r') as file:
-        config = json.load(file)
-
-    # Navigate to the dataset-specific configuration
-    try:
-        dataset_config = config[model_decision][task_type][dataset_choice]
-    except KeyError:
-        raise ValueError(f"Dataset choice '{dataset_choice}' not found in config file.")
-
     # Parse the structure string
     structure_counts = [int(x) for x in structure.split('-')]
 
@@ -425,17 +408,9 @@ def modify_and_update_config(dataset_choice, task_type, model_decision, structur
         for layer in dataset_config['layers']
     ]
 
-    if current_structure == structure_counts:
-        # Check if only the operation needs to be updated
-        if dataset_config.get('operation') != operation_type:
-            dataset_config['operation'] = operation_type
-            print("Updated the operation type without modifying the layer structure.")
-            with open("config.json", 'w') as file:
-                json.dump(config, file, indent=4)
-            return config
-
+    if current_structure == structure_counts and dataset_config.get('operation') == operation_type:
         print("The desired structure and operation are already in place. No changes made.")
-        return config
+        return dataset_config
 
     # Handle cases with fewer layers in the original config
     while len(dataset_config['layers']) < len(structure_counts):
@@ -461,11 +436,8 @@ def modify_and_update_config(dataset_choice, task_type, model_decision, structur
     if operation_type:
         dataset_config['operation'] = operation_type
 
-    # Save the updated configuration back to the file
-    with open("config.json", 'w') as file:
-        json.dump(config, file, indent=4)
+    return dataset_config
 
-    return config
 
 
 

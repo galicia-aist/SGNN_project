@@ -409,7 +409,7 @@
                         "neurons": 256,
                         "inner_act": "tanh",
                         "activation": "leaky_relu=0.2",
-                        "learning_rate": 2.5e-5,
+                        "learning_rate": 2.5e-05,
                         "order": 1,
                         "max_iter": 40,
                         "batch_size": 256
@@ -435,7 +435,7 @@
                         "neurons": 2024,
                         "inner_act": "tanh",
                         "activation": "leaky_relu=0.3",
-                        "learning_rate": 2.5e-5,
+                        "learning_rate": 2.5e-05,
                         "order": 2,
                         "max_iter": 300,
                         "batch_size": 140

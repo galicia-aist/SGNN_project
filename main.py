@@ -93,9 +93,11 @@ def main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTun
     if isTuning is None:
         with open('./config.json', 'r') as file:
             settings = json.load(file)
-            config = settings[model_decision][task_type][dataset_decision]
-            logger.info(json.dumps(config, indent=4))
-        run_experiment(cuda_num, exp_times, config, dataset_decision, model_decision, is_ddp, logger=logger)
+            dataset_config = settings[model_decision][task_type][dataset_decision]
+            if mm_op is not None and mm_structure is not None:
+                dataset_config = utils.modify_and_return_config(dataset_config, mm_structure, mm_op)
+            logger.info(json.dumps(dataset_config, indent=4))
+        run_experiment(cuda_num, exp_times, dataset_config, dataset_decision, model_decision, is_ddp, logger=logger)
     else:
         tuning_accuracy_list = []
         tuning_efficiency_list = []
@@ -125,14 +127,14 @@ def main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTun
 
 if __name__ == "__main__":
     (cuda_num, dataset_decision, model_decision, task_type, exp_times,
-     logPath, isTuning, ddp, mm_op, mm_structure) = set_arg_parser()
+     logPath, isTuning, ddp, mm_op, mm_structure, log_level) = set_arg_parser()
 
     logger_settings = {
         "logger": {
             "model": model_decision,
             "log_path": logPath,
             "dataset": dataset_decision,
-
+            "log_level": log_level.upper()  # Store the log level in uppercase for consistency
         },
         "ddp": ddp
     }
@@ -142,26 +144,18 @@ if __name__ == "__main__":
 
     logger = get_logger()
 
-    logger.info(f"Dataset: {dataset_decision}")  # Check the CUDA version supported by PyTorch
-    logger.info(f"Model: {model_decision}")  # Check the CUDA version supported by PyTorch
-    logger.info(f"CUDA num: {cuda_num}")  # Check the CUDA version supported by PyTorch
-    logger.info(f"Task: {task_type}")  # Check the CUDA version supported by PyTorch
-    logger.info(f"Number of experiments: {exp_times}")  # Check the CUDA version supported by PyTorch
-    logger.info(f"CUDA version: {torch.version.cuda}")  # Check the CUDA version supported by PyTorch
-    logger.info(f"CUDA active: {torch.cuda.is_available()}")  # Check if CUDA is detected
-    logger.info(f"Pytorch version: {torch.version.__version__}")  # Check PyTorch version
-    logger.info(f"DDP: {ddp}")  # Check PyTorch version
-    logger.info(f"Multi-Model Operation: {mm_op}")  # Check PyTorch version
-    logger.info(f"Multi-Model Structure: {mm_structure}")  # Check PyTorch version
-
-
-    mm_structure = "1-4-1"
-    mm_op = "concat"
-
-    if mm_structure is not None:
-        utils.modify_and_update_config(dataset_decision, task_type, model_decision, mm_structure,
-                                       operation_type=mm_op)
-
+    logger.info(f"Dataset: {dataset_decision}")
+    logger.info(f"Model: {model_decision}")
+    logger.info(f"CUDA num: {cuda_num}")
+    logger.info(f"Task: {task_type}")
+    logger.info(f"Number of experiments: {exp_times}")
+    logger.info(f"CUDA version: {torch.version.cuda}")
+    logger.info(f"CUDA active: {torch.cuda.is_available()}")
+    logger.info(f"PyTorch version: {torch.__version__}")
+    logger.info(f"DDP: {ddp}")
+    logger.info(f"Multi-Model Operation: {mm_op}")
+    logger.info(f"Multi-Model Structure: {mm_structure}")
+    logger.info(f"Log level: {log_level}")
 
 
     main(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, ddp, mm_op, mm_structure,
