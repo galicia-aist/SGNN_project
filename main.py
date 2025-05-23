@@ -155,7 +155,7 @@ if __name__ == "__main__":
     logger.info(f"Multi-Model Structure: {mm_structure}")  # Check PyTorch version
 
 
-    mm_structure = "1-8-1"
+    mm_structure = "1-4-1"
     mm_op = "concat"
 
     if mm_structure is not None:
