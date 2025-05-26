@@ -101,20 +101,21 @@ def main_multiple_experiments(experiments, logger):
         is_ddp = exp.get('is_ddp', False)
         mm_op = exp.get('multi_model_operation')
         mm_structure = exp.get('multi_model_structure')
-
-        logger.info(f"Experiment parameters: Dataset={dataset_decision}, Model={model_decision}, Task={task_type}, "
-                    f"exp_times={exp_times}, tuning={isTuning}, ddp={is_ddp}, mm_op={mm_op}, mm_structure={mm_structure}")
+        tuning_params = exp.get('tuning_parameters', None)
 
         main_single_experiment(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp,
-                               mm_op, mm_structure, experiment_name, logger)
+                               mm_op, mm_structure, experiment_name, logger=logger, tuning_params=tuning_params)
+
 
 
 def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp,
-                           mm_op, mm_structure, experiment_name, logger=None):
+                           mm_op, mm_structure, experiment_name, logger=None, tuning_params=None):
+
+    with open('./config.json', 'r') as file:
+        settings = json.load(file)
+    dataset_config = settings[model_decision][task_type][dataset_decision]
+
     if isTuning is None:
-        with open('./config.json', 'r') as file:
-            settings = json.load(file)
-        dataset_config = settings[model_decision][task_type][dataset_decision]
         if mm_op is not None and mm_structure is not None:
             dataset_config = utils.modify_and_return_config(dataset_config, mm_structure, mm_op)
         logger.info(json.dumps(dataset_config, indent=4))
@@ -126,7 +127,7 @@ def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type
         tuning_time_taken_list = []
         for time in range(isTuning):
             logger.info(f"\n=======\nRunning hyperparameter tuning {time + 1} of {isTuning} for '{experiment_name}'\n=======")
-            config = sample_hyperparams("ranges.json", dataset_decision)
+            config = sample_hyperparams("ranges.json", dataset_config, tuning_params)
             logger.info(json.dumps(config, indent=4))
             average_accuracy, average_efficiency, average_nmi, average_time_taken = run_experiment(
                 cuda_num, exp_times, config, dataset_decision, model_decision, task_type, is_ddp, experiment_name,

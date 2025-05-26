@@ -178,8 +178,12 @@ def set_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
 
-def sample_hyperparams(filename, dataset_name):
-    """Reads hyperparameter ranges from a JSON file and randomly selects a configuration."""
+
+def sample_hyperparams(filename, dataset_config, tuning_params=None):
+    """
+    Reads hyperparameter ranges from a JSON file and modifies the dataset configuration.
+    If tuning_params are specified, only tune these parameters while keeping others the same.
+    """
     random.seed()
 
     with open(filename, "r") as f:
@@ -187,31 +191,48 @@ def sample_hyperparams(filename, dataset_name):
 
     params = data["Test"]
 
-    # Randomly sample values for global hyperparameters
-    sampled_params = {
-        "eta": random.choice(params["eta"]),
-        "BP_count": random.choice(params["BP_count"]),
-        "lam": random.choice(params["lam"]),
-        "layers": []
-    }
+    # Start with the dataset configuration as the base
+    sampled_params = dataset_config.copy()
 
-    # Determine random number of layers (2 or 3)
-    num_layers = random.choice([2, 3])
+    if tuning_params:
+        # Modify only the specified tuning parameters
+        for param in tuning_params:
+            if param in params:
+                if param == "layers":
+                    # For layers, ensure tuning of only specified parameters within each layer
+                    sampled_layers = []
+                    for layer in sampled_params.get("layers", []):
+                        tuned_layer = layer.copy()
+                        for layer_param in tuning_params["layers"]:
+                            if layer_param in params["layer"][0]:
+                                tuned_layer[layer_param] = random.choice(params["layer"][0][layer_param])
+                        sampled_layers.append(tuned_layer)
+                    sampled_params["layers"] = sampled_layers
+                else:
+                    # For global parameters, update directly
+                    sampled_params[param] = random.choice(params[param])
+    else:
+        # Fully random sampling when no tuning parameters are given
+        sampled_params["eta"] = random.choice(params["eta"])
+        sampled_params["BP_count"] = random.choice(params["BP_count"])
+        sampled_params["lam"] = random.choice(params["lam"])
 
-    # Sample values for each layer dynamically
-    for _ in range(num_layers):
-        sampled_layer = {
-            "neurons": random.choice(params["layer"][0]["neurons"]),
-            "inner_act": random.choice(params["layer"][0]["inner_act"]),
-            "activation": random.choice(params["layer"][0]["activation"]),
-            "learning_rate": random.choice(params["layer"][0]["learning_rate"]),
-            "order": random.choice(params["layer"][0]["order"]),
-            "max_iter": random.choice(params["layer"][0]["max_iter"]),
-            "batch_size": random.choice(params["layer"][0]["batch_size"])
-        }
-        sampled_params["layers"].append(sampled_layer)
+        num_layers = random.choice([2, 3])
+        sampled_params["layers"] = []
+        for _ in range(num_layers):
+            sampled_layer = {
+                "neurons": random.choice(params["layer"][0]["neurons"]),
+                "inner_act": random.choice(params["layer"][0]["inner_act"]),
+                "activation": random.choice(params["layer"][0]["activation"]),
+                "learning_rate": random.choice(params["layer"][0]["learning_rate"]),
+                "order": random.choice(params["layer"][0]["order"]),
+                "max_iter": random.choice(params["layer"][0]["max_iter"]),
+                "batch_size": random.choice(params["layer"][0]["batch_size"]),
+            }
+            sampled_params["layers"].append(sampled_layer)
 
     return sampled_params
+
 
 def set_arg_parser():
     ALLOWED_DATASETS = [
