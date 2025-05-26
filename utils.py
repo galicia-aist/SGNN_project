@@ -267,10 +267,17 @@ def set_arg_parser():
         default="info",
         help="Set the logging level (default: info)"
     )
+    parser.add_argument(
+        "--exps_file",
+        type=str,
+        required=False,
+        default=None,
+        help="Path to JSON file containing multiple experiment configurations to run sequentially."
+    )
     args = parser.parse_args()
 
     return (args.cuda_num, args.data, args.model, args.task, args.exp, args.log_path,
-            args.tuning, args.ddp, args.mm_op, args.mm_structure, args.log_level)
+            args.tuning, args.ddp, args.mm_op, args.mm_structure, args.log_level, args.exps_file)
 
 
 

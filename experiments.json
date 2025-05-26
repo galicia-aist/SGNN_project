@@ -1,0 +1,28 @@
+{
+    "experiments": [
+        {
+            "experiment_name": "Cora Classification with SGNN",
+            "task_type": "Classification",
+            "dataset": "Cora",
+            "model": "SGNN",
+            "cuda_num": 0,
+            "exp_times": 5,
+            "is_ddp": false,
+            "is_tuning": null,
+            "multi_model_operation": null,
+            "multi_model_structure": null
+        },
+        {
+            "experiment_name": "Citeseer 3-1 Classification with SGNN",
+            "task_type": "Classification",
+            "dataset": "Citeseer",
+            "model": "SGNN",
+            "cuda_num": 0,
+            "exp_times": 10,
+            "is_ddp": true,
+            "is_tuning": null,
+            "multi_model_operation": "concat",
+            "multi_model_structure": "8-1"
+        }
+    ]
+}

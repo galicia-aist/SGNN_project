@@ -68,19 +68,21 @@ python main.py --cuda_num=0 --data="Reddit" --model=SGNN --task="Classification"
 ```
 # SGNN Script Arguments
 
-| Argument         | Type   | Required | Description                                                                                     |
-|------------------|--------|----------|-------------------------------------------------------------------------------------------------|
-| `--cuda_num`     | str    | Yes      | Specifies the GPU device to use for computation.                                               |
-| `--model`        | str    | Yes      | Defines the type of model to use. Choices: `SGNN`, `SGC`, `GCN`.                               |
-| `--data`         | str    | Yes      | Name of the dataset to be used in the experiment. Choices include popular graph datasets.       |
-| `--task`         | str    | Yes      | Defines the type of task. Options: `classification` or `clustering`.                           |
-| `--exp`          | int    | Yes      | Specifies the number of times to run the experiment for statistical validation.                |
-| `--log_path`     | str    | No       | Path to store log data.                                                                        |
-| `--tuning`       | int    | No       | Number of iterations for hyperparameter tuning (if applicable).                                |
-| `--ddp`          | flag   | No       | Enables Distributed Data Parallelism (DDP). Default is False.                                  |
-| `--mm_op`        | str    | No       | Specifies the operation for multi-model configurations. Options: `concat` or `add`.            |
-| `--mm_structure` | str    | No       | Defines the multi-model structure, such as `1-2-1`, `2-2-1`, etc.                              |
-| `--log_level`    | str    | No       | Sets the logging level. Choices: `info` (default) or `debug`.                                  |
+| Argument           | Type   | Required | Description                                                                                     |
+|--------------------|--------|----------|-------------------------------------------------------------------------------------------------|
+| `--cuda_num`       | str    | Yes      | Specifies the GPU device to use for computation.                                               |
+| `--model`          | str    | Yes      | Defines the type of model to use. Choices: `SGNN`, `SGC`, `GCN`.                               |
+| `--data`           | str    | Yes      | Name of the dataset to be used in the experiment. Choices include popular graph datasets.       |
+| `--task`           | str    | Yes      | Defines the type of task. Options: `classification` or `clustering`.                           |
+| `--exp`            | int    | Yes      | Specifies the number of times to run the experiment for statistical validation.                |
+| `--log_path`       | str    | No       | Path to store log data.                                                                        |
+| `--tuning`         | int    | No       | Number of iterations for hyperparameter tuning (if applicable).                                |
+| `--ddp`            | flag   | No       | Enables Distributed Data Parallelism (DDP). Default is False.                                  |
+| `--mm_op`          | str    | No       | Specifies the operation for multi-model configurations. Options: `concat` or `add`.            |
+| `--mm_structure`   | str    | No       | Defines the multi-model structure, such as `1-2-1`, `2-2-1`, etc.                              |
+| `--log_level`      | str    | No       | Sets the logging level. Choices: `info` (default) or `debug`.                                  |
+| `--exps_file`      | str    | No       | Path to a JSON file containing multiple experiments configurations for batch processing.       |
+
 
 
 
