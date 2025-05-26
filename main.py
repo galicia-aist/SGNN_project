@@ -110,7 +110,6 @@ def main_multiple_experiments(experiments, logger):
 
 def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp,
                            mm_op, mm_structure, experiment_name, logger=None, tuning_params=None):
-
     with open('./config.json', 'r') as file:
         settings = json.load(file)
     dataset_config = settings[model_decision][task_type][dataset_decision]
@@ -125,9 +124,11 @@ def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type
         tuning_accuracy_list = []
         tuning_efficiency_list = []
         tuning_time_taken_list = []
+        tested_configs = set()  # Store tested configurations
+
         for time in range(isTuning):
             logger.info(f"\n=======\nRunning hyperparameter tuning {time + 1} of {isTuning} for '{experiment_name}'\n=======")
-            config = sample_hyperparams("ranges.json", dataset_config, tuning_params)
+            config, tested_configs = sample_hyperparams("ranges.json", dataset_config, tuning_params, tested_configs=tested_configs)
             logger.info(json.dumps(config, indent=4))
             average_accuracy, average_efficiency, average_nmi, average_time_taken = run_experiment(
                 cuda_num, exp_times, config, dataset_decision, model_decision, task_type, is_ddp, experiment_name,
@@ -135,14 +136,17 @@ def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type
             tuning_accuracy_list.append(average_accuracy)
             tuning_efficiency_list.append(average_efficiency)
             tuning_time_taken_list.append(average_time_taken)
+
+        logger.info(f"FINAL RESULTS")
         logger.info(f"All the tuning accuracies: {tuning_accuracy_list}")
         logger.info(f"Best accuracy: {max(tuning_accuracy_list)}")
         logger.info(f"All the tuning efficiencies: {tuning_efficiency_list}")
         logger.info(f"Best efficiency: {min(tuning_efficiency_list)}")
-        logger.info(f"All the times taken: {tuning_efficiency_list}")
+        logger.info(f"All the times taken: {tuning_time_taken_list}")
         logger.info(f"Best time taken: {min(tuning_time_taken_list)}")
         logger.info(f"Multi-model operation: {mm_op}")
         logger.info(f"Multi-model structure: {mm_structure}")
+
 
 
 if __name__ == "__main__":
