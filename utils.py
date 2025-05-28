@@ -10,7 +10,7 @@ from sklearn.metrics import f1_score
 import json
 import argparse
 import logging
-import hashlib
+from itertools import product
 
 def generate_overlooked_adjacency(adjacency, rate=0.0):
     """
@@ -180,68 +180,45 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def sample_hyperparams(filename, dataset_config, tuning_params=None, tested_configs=None):
+def generate_hyperparam_combinations(base_config, params, tuning_params=None):
     """
-    Reads hyperparameter ranges from a JSON file and modifies the dataset configuration.
-    Ensures each sampled configuration is unique by comparing against tested_configs.
+    Generate all possible hyperparameter combinations and merge them with the base configuration.
     """
+    param_grid = {}
 
-    with open(filename, "r") as f:
-        data = json.load(f)
+    # Build the parameter grid for Cartesian product
+    if tuning_params:
+        for param in tuning_params:
+            if param in params:
+                param_grid[param] = params[param]
+            elif param == "layers":
+                layer_combinations = []
+                for layer in params["layer"]:
+                    layer_combinations.extend(product(*[layer[key] for key in layer]))
+                param_grid["layers"] = layer_combinations
+    else:
+        param_grid = params
 
-    params = data["Test"]
-    sampled_params = None
-    tested_configs = tested_configs or set()
+    # Generate all combinations
+    keys, values = zip(*param_grid.items())
+    combinations = [dict(zip(keys, v)) for v in product(*values)]
 
-    def hash_config(config):
-        """Create a unique hash for a given configuration."""
-        config_str = json.dumps(config, sort_keys=True)
-        return hashlib.sha256(config_str.encode()).hexdigest()
+    # Merge each combination with the base configuration
+    merged_configs = []
+    for combination in combinations:
+        config_copy = base_config.copy()
+        for key, value in combination.items():
+            if key == "layers":
+                # Replace layers in the base configuration
+                config_copy["layers"] = []
+                for layer_values in value:
+                    layer_config = {k: v for k, v in zip(params["layer"][0].keys(), layer_values)}
+                    config_copy["layers"].append(layer_config)
+            else:
+                config_copy[key] = value
+        merged_configs.append(config_copy)
 
-    while True:
-        # Start with the dataset configuration as the base
-        sampled_params = dataset_config.copy()
-
-        if tuning_params:
-            for param in tuning_params:
-                if param in params:
-                    if param == "layers":
-                        sampled_layers = []
-                        for layer in sampled_params.get("layers", []):
-                            tuned_layer = layer.copy()
-                            for layer_param in tuning_params["layers"]:
-                                if layer_param in params["layer"][0]:
-                                    tuned_layer[layer_param] = random.choice(params["layer"][0][layer_param])
-                            sampled_layers.append(tuned_layer)
-                        sampled_params["layers"] = sampled_layers
-                    else:
-                        sampled_params[param] = random.choice(params[param])
-        else:
-            sampled_params["eta"] = random.choice(params["eta"])
-            sampled_params["BP_count"] = random.choice(params["BP_count"])
-            sampled_params["lam"] = random.choice(params["lam"])
-
-            num_layers = random.choice([2, 3])
-            sampled_params["layers"] = []
-            for _ in range(num_layers):
-                sampled_layer = {
-                    "neurons": random.choice(params["layer"][0]["neurons"]),
-                    "inner_act": random.choice(params["layer"][0]["inner_act"]),
-                    "activation": random.choice(params["layer"][0]["activation"]),
-                    "learning_rate": random.choice(params["layer"][0]["learning_rate"]),
-                    "order": random.choice(params["layer"][0]["order"]),
-                    "max_iter": random.choice(params["layer"][0]["max_iter"]),
-                    "batch_size": random.choice(params["layer"][0]["batch_size"]),
-                }
-                sampled_params["layers"].append(sampled_layer)
-
-        # Generate hash and ensure uniqueness
-        config_hash = hash_config(sampled_params)
-        if config_hash not in tested_configs:
-            tested_configs.add(config_hash)
-            break
-
-    return sampled_params, tested_configs
+    return merged_configs
 
 
 def set_arg_parser():

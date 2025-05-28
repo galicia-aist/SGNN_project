@@ -1,6 +1,6 @@
 from GNN_tasks import run_classificaton_with_SGNN, run_clustering_with_SGNN, run_classification_with_SGC
 import json
-from utils import sample_hyperparams, set_arg_parser, get_logger
+from utils import set_arg_parser, get_logger
 import torch
 import torch.multiprocessing as mp
 import utils
@@ -107,7 +107,6 @@ def main_multiple_experiments(experiments, logger):
                                mm_op, mm_structure, experiment_name, logger=logger, tuning_params=tuning_params)
 
 
-
 def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp,
                            mm_op, mm_structure, experiment_name, logger=None, tuning_params=None):
     with open('./config.json', 'r') as file:
@@ -121,32 +120,50 @@ def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type
         run_experiment(cuda_num, exp_times, dataset_config, dataset_decision, model_decision, task_type, is_ddp,
                        experiment_name, logger=logger)
     else:
-        tuning_accuracy_list = []
-        tuning_efficiency_list = []
-        tuning_time_taken_list = []
-        tested_configs = set()  # Store tested configurations
+        # Load hyperparameter ranges
+        with open("ranges.json", "r") as f:
+            hyperparam_data = json.load(f)["Test"]
 
-        for time in range(isTuning):
-            logger.info(f"\n=======\nRunning hyperparameter tuning {time + 1} of {isTuning} for '{experiment_name}'\n=======")
-            config, tested_configs = sample_hyperparams("ranges.json", dataset_config, tuning_params, tested_configs=tested_configs)
+        # Generate all combinations of hyperparameters
+        all_combinations = utils.generate_hyperparam_combinations(dataset_config, hyperparam_data, tuning_params=tuning_params)
+
+        # Ensure we don't exceed the number of combinations
+        isTuning = min(isTuning, len(all_combinations))
+        logger.info(f"Total configurations available: {len(all_combinations)}")
+        logger.info(f"Running {isTuning} tuning iterations.")
+
+        tuning_results = []  # To store configurations and results
+
+        for i, config in enumerate(all_combinations[:isTuning], 1):
+            logger.info(f"\n=======\nRunning tuning iteration {i}/{isTuning} for '{experiment_name}'\n=======")
             logger.info(json.dumps(config, indent=4))
             average_accuracy, average_efficiency, average_nmi, average_time_taken = run_experiment(
                 cuda_num, exp_times, config, dataset_decision, model_decision, task_type, is_ddp, experiment_name,
                 logger=logger)
-            tuning_accuracy_list.append(average_accuracy)
-            tuning_efficiency_list.append(average_efficiency)
-            tuning_time_taken_list.append(average_time_taken)
 
-        logger.info(f"FINAL RESULTS")
-        logger.info(f"All the tuning accuracies: {tuning_accuracy_list}")
-        logger.info(f"Best accuracy: {max(tuning_accuracy_list)}")
-        logger.info(f"All the tuning efficiencies: {tuning_efficiency_list}")
-        logger.info(f"Best efficiency: {min(tuning_efficiency_list)}")
-        logger.info(f"All the times taken: {tuning_time_taken_list}")
-        logger.info(f"Best time taken: {min(tuning_time_taken_list)}")
-        logger.info(f"Multi-model operation: {mm_op}")
-        logger.info(f"Multi-model structure: {mm_structure}")
+            # Record results with the configuration
+            tuning_results.append({
+                "config": config,
+                "average_accuracy": average_accuracy,
+                "average_efficiency": average_efficiency,
+                "average_nmi": average_nmi,
+                "average_time_taken": average_time_taken
+            })
 
+        # Log results
+        logger.info(f"\nFINAL TUNING RESULTS for '{experiment_name}'")
+        for i, result in enumerate(tuning_results, 1):
+            logger.info(f"Experiment {i}:")
+            logger.info(f"Configuration: {json.dumps(result['config'], indent=4)}")
+            logger.info(f"Average Accuracy: {result['average_accuracy']}")
+            logger.info(f"Average Efficiency: {result['average_efficiency']}")
+            logger.info(f"Average NMI: {result['average_nmi']}")
+            logger.info(f"Average Time Taken: {result['average_time_taken']}\n")
+
+        # Log best result
+        best_result = max(tuning_results, key=lambda x: x["average_accuracy"])
+        logger.info(f"Best configuration by accuracy: {json.dumps(best_result['config'], indent=4)}")
+        logger.info(f"Accuracy: {best_result['average_accuracy']}")
 
 
 if __name__ == "__main__":
