@@ -486,6 +486,100 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
         return prediction.detach()
 
 
+class SingleLayerEmbeddingSGC(SingleLayerGNN):
+    def __init__(self, adjacency, labels, training_mask, input_dim, embedding_dim,
+                 val_mask, lam=10 ** -2, learning_rate=10 ** -3, max_iter=50,
+                 inner_activation=None, activation=None, device=None,
+                 batch_size=100, regularization=RIDGE, order=1, logger=None):
+        """
+        SGNN-style Single Layer Simplified Graph Convolution with inner activations
+        """
+        self.n_class = np.unique(labels).shape[0]
+        super().__init__(adjacency, input_dim, embedding_dim, lam=lam,
+                         learning_rate=learning_rate, max_iter=max_iter,
+                         inner_activation=inner_activation, activation=activation,
+                         device=device, batch_size=batch_size, regularization=regularization,
+                         order=order, logger=logger)
+        self.labels = torch.tensor(labels).long().to(self.device)
+        self.training_mask = torch.tensor(training_mask).to(self.device)
+        self.val_mask = torch.tensor(val_mask).to(self.device)
+        self.crossEntropy = torch.nn.CrossEntropyLoss()
+        self.losses = []
+        self.Wt = utils.get_weight_initial([embedding_dim, self.n_class]).to(self.device)
+
+    def compute_with_U(self, X):
+        """
+        Apply the learnable U matrix to input X
+        """
+        return self.inner_activation(X.matmul(self.U))
+
+    def get_samples(self, X, labels=None, embedding_target=None, sample_size=-1):
+        idx, samples, sampled_embedding_target = super().get_samples(X, embedding_target, num=sample_size)
+        sampled_labels = None if labels is None else labels[idx]
+        return samples, sampled_embedding_target, sampled_labels
+
+    def build_loss(self, embedding, labels, embedding_target=None, eta=1):
+        """
+        Combine cross-entropy loss with backward loss and regularization
+        """
+        loss = self.build_CE_loss(embedding, labels)
+        if embedding_target is not None:
+            loss += eta * self.build_backward_loss(embedding, embedding_target)
+        loss += self.lam * self.compute_regularization(self.regularization)
+        return loss
+
+    def build_CE_loss(self, embedding, labels):
+        """
+        Compute the cross-entropy loss for classification tasks
+        """
+        label_embedding = embedding.matmul(self.Wt)
+        return self.crossEntropy(label_embedding, labels)
+
+    def run(self, X, embedding_target=None, eta=1, train=True):
+        """
+        Execute forward and backward training processes
+        """
+        processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device), self.device,
+                                                                   order=self.order)
+
+        if not train:
+            embedding = self(processed_X)
+            self.expected_X = self.compute_with_U(X.to(self.device)).cpu().detach()
+            return embedding.detach()
+
+        training_X = processed_X[self.training_mask, :]
+        training_target = None if embedding_target is None else embedding_target[
+                                                                self.training_mask.to(embedding_target.device), :]
+        training_labels = self.labels[self.training_mask]
+
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        for i in range(self.max_iter):
+            optimizer.zero_grad()
+            samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels,
+                                                                                 embedding_target=training_target)
+            embedding = self(samples)
+            loss = self.build_loss(embedding, sampled_labels, sampled_embedding_target, eta=eta)
+            loss.backward()
+            optimizer.step()
+            self.losses.append(loss.item())
+
+            if i % (1000 if self.max_iter > 2000 else 100) == 0 or i == self.max_iter - 1:
+                self.logger.debug(f'iteration:{i}, loss: {loss.item()}')
+
+        embedding = self(processed_X)
+        self.expected_X = self.compute_with_U(X.to(self.device)).cpu().detach()
+        return embedding.detach().cpu()
+
+    def predict(self, embedding):
+        """
+        Predict class labels based on embeddings
+        """
+        label_embedding = embedding.to(self.device).matmul(self.Wt)
+        softMax = torch.nn.Softmax(dim=1)
+        soft_labels = softMax(label_embedding)
+        return soft_labels.argmax(dim=1).detach()
+
+
 class StackedGNN:
     def __init__(self, content, adjacency, layers,
                  overlooked_rates=None, eta=1, BP_count=0,
@@ -538,6 +632,8 @@ class StackedGNN:
                         sub_gnn = self._build_supervised_GNN(input_dim, sub_layer_param, overlooked_rate)
                     elif sub_layer_param.gnn_type is LayerParam.EGCN:
                         sub_gnn = self._build_supervised_EGCN(input_dim, sub_layer_param, overlooked_rate)
+                    elif layer_param.gnn_type is LayerParam.SGC:
+                        sub_gnn = self._build_supervised_SGC(input_dim, layer_param, overlooked_rate)
                     assert sub_gnn is not None
 
                     ddp = get_ddp_setting()
@@ -557,6 +653,8 @@ class StackedGNN:
                     gnn = self._build_supervised_GNN(input_dim, layer_param, overlooked_rate)
                 elif layer_param.gnn_type is LayerParam.EGCN:
                     gnn = self._build_supervised_EGCN(input_dim, layer_param, overlooked_rate)
+                elif layer_param.gnn_type is LayerParam.SGC:
+                    gnn = self._build_supervised_SGC(input_dim, layer_param, overlooked_rate)
                 assert gnn is not None
 
                 ddp = get_ddp_setting()
@@ -781,6 +879,21 @@ class SupervisedStackedGNN(StackedGNN):
                               batch_size=batch_size, inner_activation=inner_activation, activation=activation,
                               regularization=RIDGE, order=conv_order, logger=self.logger)
 
+    def _build_supervised_SGC(self, input_dim, layer_param, overlooked_rate=0.0):
+        embedding_dim = layer_param.neurons
+        inner_activation = layer_param.inner_activation
+        activation = layer_param.activation
+        learning_rate = layer_param.get('learning_rate', 0.01)
+        conv_order = layer_param.get('order', 1)
+        max_iter = layer_param.get('max_iter', 10)
+        lam = layer_param.get('lam', 0)
+        batch_size = layer_param.get('batch_size', 64)
+        return SingleLayerEmbeddingSGC(self.adjacency_tensor, self.labels, self.training_mask, input_dim,
+                                       embedding_dim, val_mask=self.val_mask,
+                              lam=lam, learning_rate=learning_rate, max_iter=max_iter, device=self.device,
+                              batch_size=batch_size, inner_activation=inner_activation, activation=activation,
+                              regularization=RIDGE, order=conv_order, logger=self.logger)
+
     def invoke_metric_function(self, inputA, inputB):
         gnn = self.gnns[-1]
         prediction = gnn.module.predict(inputA) if get_ddp_setting() else gnn.predict(inputA)
@@ -845,6 +958,7 @@ class LayerParam:
     GAE = 0
     GCN = 1
     EGCN = 2
+    SGC = 3
     MASK_RATE = 'mask_rate'
 
     def __init__(self, neurons, inner_act, act, gnn_type, **kwargs):
@@ -867,6 +981,8 @@ class LayerParam:
             st = 'type: GCN'
         elif self.gnn_type == LayerParam.EGCN:
             st = 'type: EGCN'
+        elif self.gnn_type == LayerParam.SGC:
+            st = 'type: SGC'
         return s + st
 
     def get(self, key, default):

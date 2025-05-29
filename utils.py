@@ -374,8 +374,10 @@ def get_layer_type(layer_name: str):
         return LayerParam.GCN
     elif layer_name == "EGCN":
         return LayerParam.EGCN
+    elif layer_name == "SGC":
+        return LayerParam.SGC
     else:
-        raise ValueError(f"Unknown layer type: {layer_name}. Supported types are: GAE, GCN, EGCN.")
+        raise ValueError(f"Unknown layer type: {layer_name}. Supported types are: GAE, GCN, EGCN, SGC.")
 
 def construct_sgnn_layers(layer_config, is_large, lam):
 
@@ -514,6 +516,7 @@ class LayerParam:
     GAE = 0
     GCN = 1
     EGCN = 2
+    SGC = 3
     MASK_RATE = 'mask_rate'
 
     def __init__(self, neurons, inner_act, act, gnn_type, **kwargs):
@@ -536,6 +539,8 @@ class LayerParam:
             st = 'type: GCN'
         elif self.gnn_type == LayerParam.EGCN:
             st = 'type: EGCN'
+        elif self.gnn_type == LayerParam.SGC:
+            st = 'type: SGC'
         return s + st
 
     def get(self, key, default):
