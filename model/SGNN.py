@@ -283,6 +283,7 @@ class SingleLayerGCN(SingleLayerGNN):
         self.val_mask = torch.tensor(val_mask).to(self.device)
         assert self.training_mask.dtype is torch.bool
         self.crossEntropy = torch.nn.CrossEntropyLoss()
+        self.logger = logger
         self.val_loss_queue = []
 
     def get_samples(self, X, labels=None, embedding_target=None):
@@ -325,7 +326,7 @@ class SingleLayerGCN(SingleLayerGNN):
             loss.backward()
             optimizer.step()
             if i % (1000 if self.max_iter > 2000 else 100) == 0 or i == self.max_iter-1:
-                self.logger.debug('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
+                self.logger.debug(f'iteration:{i}, loss: {loss.item()}')
             # if self.stop_training(processed_X):
             #     print('iteration:%3d,' % i, 'loss: %6.5f' % loss.item())
             #     break
@@ -642,9 +643,12 @@ class StackedGNN:
                 if (isinstance(self.gnns[i-1], list) and not isinstance(self.gnns[i], list)):
                     # self.logger.debug("this is a layer that will process concat input")
                     gnn.module.set_training_direction(False, reset_backward=(i != 0),
-                                                      previous_output_dim=self.gnns[i-1][0].embedding_dim, previous_layer_count=len(self.gnns[i-1]), mmop=self.mmop) if get_ddp_setting() \
+                                                      previous_output_dim=self.gnns[i-1][0].embedding_dim,
+                                                      previous_layer_count=len(self.gnns[i-1]),
+                                                      mmop=self.mmop) if get_ddp_setting() \
                         else gnn.set_training_direction(False, reset_backward=(i != 0),
-                                                        previous_output_dim=self.gnns[i-1][0].embedding_dim, previous_layer_count=len(self.gnns[i-1]), mmop=self.mmop)
+                                                        previous_output_dim=self.gnns[i-1][0].embedding_dim,
+                                                        previous_layer_count=len(self.gnns[i-1]), mmop=self.mmop)
                 else:
                     gnn.module.set_training_direction(False, reset_backward=(i != 0)) if get_ddp_setting() \
                         else gnn.set_training_direction(False, reset_backward=(i != 0))
@@ -760,7 +764,7 @@ class SupervisedStackedGNN(StackedGNN):
         return SingleLayerGCN(self.adjacency_tensor, self.labels, self.training_mask, input_dim, val_mask=self.val_mask,
                               lam=lam, learning_rate=learning_rate, max_iter=max_iter, device=self.device,
                               batch_size=batch_size, inner_activation=inner_activation, activation=activation,
-                              regularization=RIDGE, order=conv_order)
+                              regularization=RIDGE, order=conv_order, logger=self.logger)
 
     def _build_supervised_EGCN(self, input_dim, layer_param, overlooked_rate=0.0): 
         embedding_dim = layer_param.neurons

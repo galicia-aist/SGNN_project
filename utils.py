@@ -366,6 +366,17 @@ def get_ddp_setting():
     with open("global_settings.json", "r") as file:
         return json.load(file)["ddp"]
 
+def get_layer_type(layer_name: str):
+
+    if layer_name == "GAE":
+        return LayerParam.GAE
+    elif layer_name == "GCN":
+        return LayerParam.GCN
+    elif layer_name == "EGCN":
+        return LayerParam.EGCN
+    else:
+        raise ValueError(f"Unknown layer type: {layer_name}. Supported types are: GAE, GCN, EGCN.")
+
 def construct_sgnn_layers(layer_config, is_large, lam):
 
     layers = []
@@ -379,18 +390,20 @@ def construct_sgnn_layers(layer_config, is_large, lam):
         else:
             current_layer_activation = layer["activation"]
             current_layer_inner_act = layer["inner_act"]
+            current_layer_type = layer["layer_type"]
 
             chosen_act = get_activation(current_layer_activation)
             chosen_inner_act = get_activation(current_layer_inner_act)
+            chosen_layer_type = get_layer_type(current_layer_type)
 
             if is_large:
                 layer_to_add = LayerParam(layer["neurons"], inner_act=chosen_inner_act, act=chosen_act,
-                                          gnn_type=LayerParam.EGCN,
+                                          gnn_type=chosen_layer_type,
                                           learning_rate=layer["learning_rate"],
                                           max_iter=layer["max_iter"], lam=lam, batch_size=layer["batch_size"])
             else:
                 layer_to_add = LayerParam(layer["neurons"], inner_act=chosen_inner_act, act=chosen_act,
-                                          gnn_type=LayerParam.EGCN,
+                                          gnn_type=chosen_layer_type,
                                           learning_rate=layer["learning_rate"],
                                           order=layer["order"], max_iter=layer["max_iter"],
                                           lam=lam, batch_size=layer["batch_size"])
