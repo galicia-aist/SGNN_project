@@ -198,7 +198,6 @@
                 "layers": [
                     {
                         "neurons": 128,
-                        "layer_type": "SGC",
                         "inner_act": "linear",
                         "activation": "leaky_relu=0.1",
                         "order": 1,
@@ -208,7 +207,6 @@
                     },
                     {
                         "neurons": 64,
-                        "layer_type": "SGC",
                         "inner_act": "linear",
                         "activation": "relu",
                         "learning_rate": 0.005,
@@ -218,7 +216,6 @@
                     },
                     {
                         "neurons": 32,
-                        "layer_type": "SGC",
                         "inner_act": "linear",
                         "activation": "linear",
                         "learning_rate": 0.01,

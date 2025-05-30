@@ -11,6 +11,8 @@ import json
 import argparse
 import logging
 from itertools import product
+import re
+import copy
 
 def generate_overlooked_adjacency(adjacency, rate=0.0):
     """
@@ -415,60 +417,109 @@ def construct_sgnn_layers(layer_config, is_large, lam):
     return layers
 
 
+def parse_structure(structure):
+    """
+    Parse a GNN structure string like "SGC-(SGC-SGC)-GCN" into a nested list representation.
+    :param structure: Structure string.
+    :return: Parsed structure as a nested list.
+    """
+    import re
+
+    # Match patterns in the structure without capturing empty strings
+    groups = re.findall(r'\(([^()]+)\)|(\w+)', structure)
+
+    parsed = []
+    for group in groups:
+        if group[0]:  # If it's inside parentheses
+            parsed.append(group[0].split('-'))
+        elif group[1]:  # If it's a single layer
+            parsed.append(group[1])
+    return parsed
+
+def generate_layers(parsed_struct, original_layers):
+    """
+    Generate new layers list based on parsed structure.
+
+    Logic:
+    - The first *single* layer uses original layer 0
+    - Any nested list duplicates original layer 0 configs
+    - The last *single* layer uses the last original layer config
+    """
+    new_layers = []
+    n = len(original_layers)
+
+    def recursive_build(struct, depth=0):
+        result = []
+        for i, elem in enumerate(struct):
+            if isinstance(elem, list):
+                # Nested list - duplicate original_layers[0]
+                duplicated_layers = [
+                    copy.deepcopy(original_layers[0]) for _ in range(len(elem))
+                ]
+                # Set each layer_type accordingly from the elem
+                for j, lt in enumerate(elem):
+                    duplicated_layers[j]['layer_type'] = lt
+                result.append(duplicated_layers)
+            else:
+                # Single element
+                # Determine if this is first or last single layer in top-level structure
+                if depth == 0:
+                    # At top level, check position for first or last
+                    if i == 0:
+                        base_layer = copy.deepcopy(original_layers[0])
+                    elif i == len(struct) - 1:
+                        base_layer = copy.deepcopy(original_layers[-1])
+                    else:
+                        # Middle single elements - fallback to first layer config for safety
+                        base_layer = copy.deepcopy(original_layers[0])
+                else:
+                    # Nested single elements (if any) just copy original layer 0
+                    base_layer = copy.deepcopy(original_layers[0])
+
+                base_layer['layer_type'] = elem
+                result.append(base_layer)
+        return result
+
+    new_layers = recursive_build(parsed_struct, depth=0)
+    return new_layers
+
+
 def modify_and_return_config(dataset_config, structure, operation_type):
     """
-    Modify and return the configuration for a given dataset based on the structure.
-
-    :param dataset_config: The configuration dictionary for the specific dataset.
-    :param structure: User input string like "2-2-1".
-    :param operation_type: The operation to be added when duplicate layers exist, e.g., "add" or "concat".
-    :return: Modified dataset configuration.
-    :raises ValueError: If the structure is invalid.
+    Modify the dataset configuration to match the specified GNN structure and operation type.
+    Handles nested structures and ensures correct base layer usage.
     """
-    # Parse the structure string
-    structure_counts = [int(x) for x in structure.split('-')]
+    parsed = parse_structure(structure)  # Parse the structure into a nested list
+    original_layers = dataset_config['layers']
 
-    # Validate structure
-    if len(structure_counts) < len(dataset_config['layers']):
-        raise ValueError("Structure length must not be less than the number of original layers.")
+    new_layers = []
 
-    # Check if the current structure and operation already match the desired configuration
-    current_structure = [
-        len(layer) if isinstance(layer, list) else 1
-        for layer in dataset_config['layers']
-    ]
+    for i, layer_type in enumerate(parsed):
+        if isinstance(layer_type, list):  # Handle parenthesis groups
+            # Use the first layer as the base for layers in the parenthesis
+            base_layer = copy.deepcopy(original_layers[0])
+            list_of_layers = []
+            for sub_layer_type in layer_type:
+                layer = copy.deepcopy(base_layer)
+                layer['layer_type'] = sub_layer_type
+                list_of_layers.append(layer)
+            new_layers.append(list_of_layers)
+        else:  # Handle single layers
+            if i == 0:  # First layer
+                base_layer = copy.deepcopy(original_layers[0])
+            elif i == len(parsed) - 1:  # Last layer
+                base_layer = copy.deepcopy(original_layers[-1])
+            else:  # Intermediate layers
+                base_layer = copy.deepcopy(original_layers[0])  # Default to first layer
+            base_layer['layer_type'] = layer_type
+            new_layers.append(base_layer)
 
-    if current_structure == structure_counts and dataset_config.get('operation') == operation_type:
-        print("The desired structure and operation are already in place. No changes made.")
-        return dataset_config
-
-    # Handle cases with fewer layers in the original config
-    while len(dataset_config['layers']) < len(structure_counts):
-        # Duplicate the first layer for additional layers
-        dataset_config['layers'].insert(1, dataset_config['layers'][0].copy())
-
-    # Create the modified configuration
-    modified_layers = []
-    for i, count in enumerate(structure_counts):
-        # Get the base layer (existing or added)
-        base_layer = dataset_config['layers'][i]
-
-        # Duplicate the layer configuration
-        modified_layers.append([base_layer.copy() for _ in range(count)])
-
-    # Flatten layers with a single duplicate to keep the structure consistent
-    modified_layers = [layer[0] if len(layer) == 1 else layer for layer in modified_layers]
-
-    # Update the configuration
-    dataset_config['layers'] = modified_layers
-
-    # Add or update the "operation" key if operation_type is provided
+    # Update the dataset configuration
+    dataset_config['layers'] = new_layers
     if operation_type:
         dataset_config['operation'] = operation_type
 
     return dataset_config
-
-
 
 
 def get_activation(current_layer_activation):
