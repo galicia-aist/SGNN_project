@@ -544,25 +544,35 @@ class SingleLayerEmbeddingSGC(SingleLayerGNN):
 
         if not train:
             embedding = self(processed_X)
-            self.expected_X = self.compute_with_U(X.to(self.device)).cpu().detach()
+            expected_X = self.compute_with_U(X.to(self.device)).cpu().detach()
+            self.expected_X = expected_X
             return embedding.detach()
-
         training_X = processed_X[self.training_mask, :]
-        training_target = None if embedding_target is None else embedding_target[
-                                                                self.training_mask.to(embedding_target.device), :]
+        if (embedding_target is not None and self.input_dim == 128):
+            pass
+        training_target = None if embedding_target is None else embedding_target[self.training_mask.to
+                                                                                 (embedding_target.device), :]
         training_labels = self.labels[self.training_mask]
-
+        # learning_rate = self.learning_rate if len(self.losses) < 150 else self.learning_rate / 10
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         for i in range(self.max_iter):
             optimizer.zero_grad()
+            # sampling
+            if (embedding_target is not None and self.input_dim == 128):
+                pass
             samples, sampled_embedding_target, sampled_labels = self.get_samples(training_X, labels=training_labels,
                                                                                  embedding_target=training_target)
             embedding = self(samples)
+            pass
             loss = self.build_loss(embedding, sampled_labels, sampled_embedding_target, eta=eta)
+            if embedding_target is not None:
+                samples, sampled_embedding_target, _ = self.get_samples(processed_X, embedding_target=embedding_target,
+                                                                        sample_size=self.batch_size)
+                emb = self(samples)
+                loss += eta * self.build_backward_loss(emb, sampled_embedding_target.to(self.device))
+            self.losses.append(loss.item())
             loss.backward()
             optimizer.step()
-            self.losses.append(loss.item())
-
             if i % (1000 if self.max_iter > 2000 else 100) == 0 or i == self.max_iter - 1:
                 self.logger.debug(f'iteration:{i}, loss: {loss.item()}')
 
@@ -632,8 +642,8 @@ class StackedGNN:
                         sub_gnn = self._build_supervised_GNN(input_dim, sub_layer_param, overlooked_rate)
                     elif sub_layer_param.gnn_type is LayerParam.EGCN:
                         sub_gnn = self._build_supervised_EGCN(input_dim, sub_layer_param, overlooked_rate)
-                    elif layer_param.gnn_type is LayerParam.SGC:
-                        sub_gnn = self._build_supervised_SGC(input_dim, layer_param, overlooked_rate)
+                    elif sub_layer_param.gnn_type is LayerParam.SGC:
+                        sub_gnn = self._build_supervised_SGC(input_dim, sub_layer_param, overlooked_rate)
                     assert sub_gnn is not None
 
                     ddp = get_ddp_setting()
