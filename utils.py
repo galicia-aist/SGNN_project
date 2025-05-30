@@ -394,7 +394,10 @@ def construct_sgnn_layers(layer_config, is_large, lam):
         else:
             current_layer_activation = layer["activation"]
             current_layer_inner_act = layer["inner_act"]
-            current_layer_type = layer["layer_type"]
+            try:
+                current_layer_type = layer["layer_type"]
+            except KeyError:
+                current_layer_type = "EGCN"
 
             chosen_act = get_activation(current_layer_activation)
             chosen_inner_act = get_activation(current_layer_inner_act)

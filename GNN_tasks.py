@@ -134,7 +134,7 @@ def run_classificaton_with_SGNN(rank, world_size, dataset_choice, config, return
 
         dist.destroy_process_group()
     else:
-        return accuracy, efficiency, total_seconds
+        return accuracy, efficiency, total_seconds, total_iterations
 
 
 def run_classification_with_SGC(rank, world_size, dataset_choice, config, return_queue):
@@ -266,7 +266,7 @@ def run_classification_with_SGC(rank, world_size, dataset_choice, config, return
 
         dist.destroy_process_group()
     else:
-        return accuracy, efficiency, total_seconds
+        return accuracy, efficiency, total_seconds, total_iterations
 
 
 def run_clustering_with_SGNN(dataset_choice, config):

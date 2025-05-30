@@ -14,6 +14,7 @@ def run_experiment(cuda_num, exp_times, config, dataset_decision, model_decision
     total_accuracy = 0
     total_efficiency = 0
     total_time_taken = 0
+    total_iterations = 0
     total_nmi = 0
     world_size = None
     return_queue = None
@@ -41,18 +42,18 @@ def run_experiment(cuda_num, exp_times, config, dataset_decision, model_decision
                 if is_DDP:
                     mp.spawn(run_classificaton_with_SGNN, args=(world_size, dataset_decision, config, return_queue),
                              nprocs=world_size, join=True)
-                    accuracy, efficiency, time_taken = return_queue.get()
+                    accuracy, efficiency, time_taken, total_iterations = return_queue.get()
                 else:
-                    accuracy, efficiency, time_taken = run_classificaton_with_SGNN(world_size, cuda_num,
+                    accuracy, efficiency, time_taken, total_iterations = run_classificaton_with_SGNN(world_size, cuda_num,
                                                                                    dataset_decision, config,
                                                                                    return_queue)
             elif model_decision == 'SGC':
                 if is_DDP:
                     mp.spawn(run_classification_with_SGC, args=(world_size, dataset_decision, config, return_queue),
                              nprocs=world_size, join=True)
-                    accuracy, efficiency, time_taken = return_queue.get()
+                    accuracy, efficiency, time_taken, total_iterations = return_queue.get()
                 else:
-                    accuracy, efficiency, time_taken = run_classification_with_SGC(world_size, cuda_num,
+                    accuracy, efficiency, time_taken, total_iterations = run_classification_with_SGC(world_size, cuda_num,
                                                                                    dataset_decision, config,
                                                                                    return_queue)
             else:
@@ -83,12 +84,14 @@ def run_experiment(cuda_num, exp_times, config, dataset_decision, model_decision
     logger.info(f"The average accuracy is: {average_accuracy}")
     logger.info(f"The average efficiency is: {average_efficiency}")
     logger.info(f"The average time taken is: {average_time_taken}")
+    logger.info(f"The total number of iterations was: {total_iterations}")
     logger.info(f"The average nmi is: {average_nmi}")
 
-    return average_accuracy, average_efficiency, average_nmi, average_time_taken
+    return average_accuracy, average_efficiency, average_nmi, average_time_taken, total_iterations
 
 
 def main_multiple_experiments(experiments, logger):
+    summary_results = []
     for i, exp in enumerate(experiments):
         experiment_name = exp.get('experiment_name', f"Experiment_{i+1}")
         logger.info(f"\n===== Running experiment {i+1} of {len(experiments)}: {experiment_name} =====")
@@ -103,8 +106,27 @@ def main_multiple_experiments(experiments, logger):
         mm_structure = exp.get('multi_model_structure')
         tuning_params = exp.get('tuning_parameters', None)
 
-        main_single_experiment(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp,
-                               mm_op, mm_structure, experiment_name, logger=logger, tuning_params=tuning_params)
+        results = main_single_experiment(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp,
+                                         mm_op, mm_structure, experiment_name, logger=logger, tuning_params=tuning_params)
+        if results:
+            average_accuracy, average_efficiency, average_nmi, average_time_taken, total_iterations = results
+            summary_results.append({
+                "experiment_name": experiment_name,
+                "average_accuracy": average_accuracy,
+                "average_efficiency": average_efficiency,
+                "average_time_taken": average_time_taken,
+                "total_iterations": total_iterations
+            })
+
+    # Print summary report
+    logger.info("\n" + "-"*40)
+    for res in summary_results:
+        logger.info(f"Experiment Name: {res['experiment_name']}")
+        logger.info(f"Average Accuracy: {res['average_accuracy']:.4f}")
+        logger.info(f"Average Time Taken: {res['average_time_taken']:.4f} sec")
+        logger.info(f"Average Efficiency: {res['average_efficiency']:.4f}")
+        logger.info(f"Total Number of Iterations: {res['total_iterations']}")
+        logger.info("-"*40)
 
 
 def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type, exp_times, isTuning, is_ddp,
@@ -117,8 +139,10 @@ def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type
         if mm_op is not None and mm_structure is not None:
             dataset_config = utils.modify_and_return_config(dataset_config, mm_structure, mm_op)
         logger.info(json.dumps(dataset_config, indent=4))
-        run_experiment(cuda_num, exp_times, dataset_config, dataset_decision, model_decision, task_type, is_ddp,
-                       experiment_name, logger=logger)
+        results = run_experiment(cuda_num, exp_times, dataset_config, dataset_decision, model_decision, task_type,
+                                 is_ddp,
+                                 experiment_name, logger=logger)
+        return results
     else:
         # Load hyperparameter ranges
         with open("ranges.json", "r") as f:
@@ -137,7 +161,7 @@ def main_single_experiment(cuda_num, dataset_decision, model_decision, task_type
         for i, config in enumerate(all_combinations[:isTuning], 1):
             logger.info(f"\n=======\nRunning tuning iteration {i}/{isTuning} for '{experiment_name}'\n=======")
             logger.info(json.dumps(config, indent=4))
-            average_accuracy, average_efficiency, average_nmi, average_time_taken = run_experiment(
+            average_accuracy, average_efficiency, average_nmi, average_time_taken, total_iterations = run_experiment(
                 cuda_num, exp_times, config, dataset_decision, model_decision, task_type, is_ddp, experiment_name,
                 logger=logger)
 
