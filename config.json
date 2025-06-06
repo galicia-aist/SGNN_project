@@ -233,17 +233,15 @@
                 "layers": [
                     {
                         "neurons": 2024,
-                        "layer_type": "SGC",
                         "inner_act": "tanh",
                         "activation": "relu",
                         "learning_rate": 1e-05,
-                        "order": 3,
+                        "order": 1,
                         "max_iter": 100,
                         "batch_size": 256
                     },
                     {
                         "neurons": 64,
-                        "layer_type": "SGC",
                         "inner_act": "tanh",
                         "activation": "linear",
                         "learning_rate": 1e-05,

@@ -408,7 +408,7 @@ class SingleLayerEmbeddingGCN(SingleLayerGNN):
 
     def run(self, X, embedding_target=None, eta=1, train=True):
 
-        # process: A * X and ensure X on device
+        # Calculates D^(-1/2) * A * D^(-1/2) * H
         processed_X = utils.process_data_with_adjacency_high_order(self.adjacency, X.to(self.device), self.device,
                                                                    order=self.order)
 

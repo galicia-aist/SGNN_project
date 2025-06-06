@@ -88,13 +88,19 @@ def process_data_with_adjacency_high_order(adjacency, X, device, order=1):
     self_loop = torch.sparse.FloatTensor(idx, torch.ones(size), torch.Size((size, size))).to(device)
     adj = adjacency + self_loop
     # idx.minimum(1)
-    degree = torch.sparse.sum(adj, dim=1).to_dense().sqrt()
-    degree = 1 / degree
 
+    # Compute sqrt(D)
+    degree = torch.sparse.sum(adj, dim=1).to_dense().sqrt()
+    # Compute D^(-1/2)
+    degree = 1 / degree
+    # X or H depending on current layer
     processed_X = X
     for i in range(order):
+        # Computes D^(-1/2) * H
         processed_X = (processed_X.t() * degree).t()
+        # Computes A * H
         processed_X = adj.mm(processed_X)
+        # Computes D^(-1/2) * H
         processed_X = (processed_X.t() * degree).t()
     return processed_X
 
@@ -491,6 +497,9 @@ def modify_and_return_config(dataset_config, structure, operation_type):
     """
     Modify the dataset configuration to match the specified GNN structure and operation type.
     Handles nested structures and ensures correct base layer usage.
+
+    - For 1-1-1 to 1-2-1: Duplicate the second layer into a list.
+    - For 1-1 to 1-2-1: Duplicate the first layer into a list for the second layer.
     """
     parsed = parse_structure(structure)  # Parse the structure into a nested list
     original_layers = dataset_config['layers']
@@ -499,8 +508,12 @@ def modify_and_return_config(dataset_config, structure, operation_type):
 
     for i, layer_type in enumerate(parsed):
         if isinstance(layer_type, list):  # Handle parenthesis groups
-            # Use the first layer as the base for layers in the parenthesis
-            base_layer = copy.deepcopy(original_layers[0])
+            # If intermediate group, duplicate either second or first layer depending on the original structure
+            if len(original_layers) >= 3:
+                base_layer = copy.deepcopy(original_layers[1])  # Use the second layer as base
+            else:
+                base_layer = copy.deepcopy(original_layers[0])  # Use the first layer as base
+
             list_of_layers = []
             for sub_layer_type in layer_type:
                 layer = copy.deepcopy(base_layer)
@@ -513,7 +526,10 @@ def modify_and_return_config(dataset_config, structure, operation_type):
             elif i == len(parsed) - 1:  # Last layer
                 base_layer = copy.deepcopy(original_layers[-1])
             else:  # Intermediate layers
-                base_layer = copy.deepcopy(original_layers[0])  # Default to first layer
+                if len(original_layers) >= 3:
+                    base_layer = copy.deepcopy(original_layers[1])  # Use the second layer as base
+                else:
+                    base_layer = copy.deepcopy(original_layers[0])  # Use the first layer as base
             base_layer['layer_type'] = layer_type
             new_layers.append(base_layer)
 
