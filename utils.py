@@ -252,6 +252,10 @@ def set_arg_parser():
         "GCN",
         "SGC"
     ]
+    ALLOWED_TASK_TYPES = [
+        "Classification",
+        "Clustering"
+    ]
 
     parser = argparse.ArgumentParser(description="SGNN script")
     parser.add_argument("--cuda_num", type=str, required=True, help="GPU to use")
@@ -269,7 +273,13 @@ def set_arg_parser():
         required=True,
         help=f"Dataset name (choices: {', '.join(ALLOWED_DATASETS)})"
     )
-    parser.add_argument("--task", type=str, required=True, help="Classification or Clustering")
+    parser.add_argument(
+        "--task",
+        type=str,
+        choices=ALLOWED_TASK_TYPES,
+        required=True,
+        help=f"Experiment type (choices: {', '.join(ALLOWED_TASK_TYPES)})"
+    )
     parser.add_argument("--exp", type=int, required=True, help="How many times do you want to run the exercise")
     parser.add_argument("--log_path", type=str, help="Where you want to store the logs")
     parser.add_argument("--tuning", type=int, help="How many times you want to tune the hyperparameters")
