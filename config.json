@@ -242,10 +242,10 @@
                     },
                     {
                         "neurons": 64,
-                        "inner_act": "tanh",
+                        "inner_act": "linear",
                         "activation": "linear",
                         "learning_rate": 1e-05,
-                        "order": 3,
+                        "order": 1,
                         "max_iter": 150,
                         "batch_size": 8192
                     }
@@ -268,11 +268,11 @@
                     },
                     {
                         "neurons": 128,
-                        "inner_act": "relu",
-                        "activation": "leaky_relu=0.2",
+                        "inner_act": "linear",
+                        "activation": "linear",
                         "learning_rate": 0.0001,
-                        "order": 2,
-                        "max_iter": 40,
+                        "order": 1,
+                        "max_iter": 30,
                         "batch_size": 2048
                     }
                 ]
