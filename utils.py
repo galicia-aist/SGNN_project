@@ -137,12 +137,24 @@ def relaxed_k_means(X, n_clusters, labels):
 
 
 def print_SGNN_info(stackedGNN, logger=None):
+    def count_layers_and_log(layers):
+        total_count = 0
+        for i, layer in enumerate(layers):
+            if isinstance(layer, list):
+                sublayer_count = len(layer)
+                logger.info(f"{i + 1}-th layer: {sublayer_count} sublayers of type [{layer[0]}]")
+                total_count += sublayer_count
+            else:
+                logger.info(f"{i + 1}-th layer: {layer}")
+                total_count += 1
+        return total_count
+
     logger.info('\n============ Settings ============')
-    logger.info('Totally {} layers:'.format(len(stackedGNN.layers)))
-    for i, layer in enumerate(stackedGNN.layers):
-        logger.info('{}-th layer: {}'.format(i + 1, layer))
+    total_layers = count_layers_and_log(stackedGNN.layers)
+    logger.info('Totally {} layers:'.format(total_layers))
     logger.info('overlook_rates={}'.format(stackedGNN.overlooked_rates))
     logger.info('BP_count={}, eta={}\n'.format(stackedGNN.BP_count, stackedGNN.eta))
+
 
 
 def clustering(X, labels):
@@ -439,12 +451,27 @@ def construct_sgnn_layers(layer_config, is_large, lam):
 def parse_structure(structure):
     """
     Parse a GNN structure string like "SGC-(SGC-SGC)-GCN" into a nested list representation.
+    Handles shorthand like "2SGC" or "(8EGCN)" and expands them appropriately.
+
     :param structure: Structure string.
     :return: Parsed structure as a nested list.
     """
     import re
 
-    # Match patterns in the structure without capturing empty strings
+    def expand_shorthand(layer_str):
+        """
+        Expand shorthand like '2SGC' or '8EGCN' to their full form.
+        """
+        match = re.match(r'(\d+)([A-Z]+)', layer_str)
+        if match:
+            count, layer_type = match.groups()
+            return '-'.join([layer_type] * int(count))
+        return layer_str
+
+    # Expand shorthands like "2SGC" or "(8EGCN)"
+    structure = re.sub(r'(\d+)([A-Z]+)', lambda m: expand_shorthand(m.group(0)), structure)
+
+    # Match patterns in the structure
     groups = re.findall(r'\(([^()]+)\)|(\w+)', structure)
 
     parsed = []
